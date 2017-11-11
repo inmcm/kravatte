@@ -1,8 +1,14 @@
 import pytest
 import numpy as np
 from random import randint
-from keccak import Keccak
+from keccak import Keccak, KeccakCfg
 
+
+class TestConfigurations:
+    def test_configuration_enumeration(self):
+        valid_configs = [new_cfg for new_cfg in KeccakCfg.__dict__.keys() if not new_cfg.startswith('_')]
+        for cfg in valid_configs:
+            assert type(getattr(KeccakCfg, cfg)) == int
 
 # Official Test Vectors
 class TestOfficialTestVectors:
@@ -10,7 +16,7 @@ class TestOfficialTestVectors:
     Official Test Vector From
     """
     def test_sha3_224_0_bit_absorb(self):
-        test = Keccak()
+        test = Keccak(KeccakCfg.sha3_224)
         g = np.zeros((5,5), dtype=np.uint64) 
         end_state = np.zeros((5,5), dtype=np.uint64)
         g[0, 0] = 0x0000000000000006
@@ -68,7 +74,7 @@ class TestOfficialTestVectors:
         assert np.equal(test.state, end_state).all()
 
     def test_sha3_256_0_bit_absorb(self):
-        test = Keccak()
+        test = Keccak(KeccakCfg.sha3_256)
         g = np.zeros((5,5), dtype=np.uint64) 
         end_state = np.zeros((5,5), dtype=np.uint64)
         g[0, 0] = 0x0000000000000006
@@ -127,7 +133,7 @@ class TestOfficialTestVectors:
 
 
     def test_sha3_384_0_bit_absorb(self):
-        test = Keccak()
+        test = Keccak(KeccakCfg.sha3_384)
         g = np.zeros((5,5), dtype=np.uint64) 
         end_state = np.zeros((5,5), dtype=np.uint64)
         g[0, 0] = 0x0000000000000006
@@ -186,7 +192,7 @@ class TestOfficialTestVectors:
 
 
     def test_sha3_512_0_bit_absorb(self):
-        test = Keccak()
+        test = Keccak(KeccakCfg.sha3_512)
         g = np.zeros((5,5), dtype=np.uint64) 
         end_state = np.zeros((5,5), dtype=np.uint64)
         g[0, 0] = 0x0000000000000006
@@ -244,7 +250,7 @@ class TestOfficialTestVectors:
         assert np.equal(test.state, end_state).all()
 
     def test_sha3_512_5_bit_absorb(self):
-        test = Keccak()
+        test = Keccak(KeccakCfg.sha3_512)
         g = np.zeros((5,5), dtype=np.uint64) 
         end_state = np.zeros((5,5), dtype=np.uint64)
         g[0, 0] = 0x00000000000000d3
@@ -303,7 +309,7 @@ class TestOfficialTestVectors:
 
 
     def test_sha3_512_30_bit_absorb(self):
-        test = Keccak()
+        test = Keccak(KeccakCfg.sha3_512)
         g = np.zeros((5,5), dtype=np.uint64) 
         end_state = np.zeros((5,5), dtype=np.uint64)
         g[0, 0] = 0x00000001997b5853
@@ -362,7 +368,7 @@ class TestOfficialTestVectors:
 
 
     def test_sha3_512_1600_bit_absorb(self):
-        test = Keccak()
+        test = Keccak(KeccakCfg.sha3_512)
         g = np.zeros((5,5), dtype=np.uint64) 
         end_state = np.zeros((5,5), dtype=np.uint64)
         g[0, 0] = 0xa3a3a3a3a3a3a3a3
@@ -506,7 +512,7 @@ class TestOfficialTestVectors:
         assert np.equal(test.state, end_state).all()
 
     def test_sha3_512_1605_bit_absorb(self):
-        test = Keccak()
+        test = Keccak(KeccakCfg.sha3_512)
         g = np.zeros((5,5), dtype=np.uint64) 
         end_state = np.zeros((5,5), dtype=np.uint64)
         g[0, 0] = 0xa3a3a3a3a3a3a3a3
@@ -652,7 +658,7 @@ class TestOfficialTestVectors:
 
 
     def test_sha3_512_1630_bit_absorb(self):
-        test = Keccak()
+        test = Keccak(KeccakCfg.sha3_512)
         g = np.zeros((5,5), dtype=np.uint64) 
         end_state = np.zeros((5,5), dtype=np.uint64)
         g[0, 0] = 0xa3a3a3a3a3a3a3a3
