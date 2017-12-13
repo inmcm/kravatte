@@ -44,6 +44,7 @@ class Keccak(object):
             #theta_step:
             tmp_array = np.copy(self.state)
             array_shift = np.left_shift(self.state, 1) + np.right_shift(self.state, 63)
+            # array_shift = self.state << np.uint64(1) | self.state >> np.uint64(63)
             for x in range(5):
                 c1 = tmp_array[(x-1)%5, 0] ^ tmp_array[(x-1)%5, 1] ^ tmp_array[(x-1)%5,2] ^ tmp_array[(x-1)%5,3] ^ tmp_array[(x-1)%5, 4]
                 c2 = array_shift[(x+1)%5, 0] ^ array_shift[(x+1)%5, 1] ^ array_shift[(x+1)%5, 2] ^ array_shift[(x+1)%5, 3] ^ array_shift[(x+1)%5, 4]
@@ -57,8 +58,8 @@ class Keccak(object):
             for t in range(24):
                 t_shift = ((t+1)*(t+2) >> 1)
                 t_mod = t_shift % 64
-                target_lane = np.array([tmp_array[tracking_index]], dtype=np.uint64)
-                target_lane = np.left_shift([tmp_array[tracking_index]], t_mod) + np.right_shift([tmp_array[tracking_index]], 64-t_mod)
+                # target_lane = np.left_shift([tmp_array[tracking_index]], t_mod) + np.right_shift([tmp_array[tracking_index]], 64-t_mod)
+                target_lane = tmp_array[tracking_index] << np.uint64(t_mod) | tmp_array[tracking_index] >> np.uint64(64 - t_mod)
                 self.state[tracking_index] = target_lane
                 tracking_index = (tracking_index[1], ((2*tracking_index[0])+(3*tracking_index[1])) % 5)    
 
@@ -82,6 +83,21 @@ class Keccak(object):
 
             #iota_step:
             self.state[0, 0] ^= self.ROUND_CONSTANTS[round_num]
+
+
+    def kravatte_roll(self, roll_count):   
+        tmp_plane = self.state[0:5, 4]
+        lane_0 = tmp_plane[0]
+        lane_1 = tmp_plane[1]
+        for _ in range(roll_count):
+            lane_0 = tmp_plane[0]
+            lane_1 = tmp_plane[1]
+            for x in range(4):
+                tmp_plane[x] = tmp_plane[x + 1]
+            shift_lane = np.left_shift(lane_0, 7 % 64) + np.right_shift(lane_0, 64 - (7 % 64))
+            tmp_plane[4] = shift_lane ^ lane_1 ^ np.right_shift(lane_1, 3)
+        self.state[0:5, 4]  = tmp_plane
+        
 
 if __name__ == '__main__':
     test = Keccak()
