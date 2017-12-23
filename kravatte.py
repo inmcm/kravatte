@@ -1,6 +1,7 @@
 # kravatte.py
 import numpy as np
-
+from operator import xor
+from functools import reduce
 
 KECCAK_ROUND_CONSTANTS = np.array([0x0000000000000001, 0x0000000000008082, 0x800000000000808A,
                                    0x8000000080008000, 0x000000000000808B, 0x0000000080000001,
@@ -12,6 +13,128 @@ KECCAK_ROUND_CONSTANTS = np.array([0x0000000000000001, 0x0000000000008082, 0x800
                                    0x8000000000008080, 0x0000000080000001, 0x8000000080008008],
                                    dtype=np.uint64)
 
+class Kravatte (object):
+    KECCAK_ROUND_CONSTANTS = np.array([0x0000000000000001, 0x0000000000008082, 0x800000000000808A,
+                                   0x8000000080008000, 0x000000000000808B, 0x0000000080000001,
+                                   0x8000000080008081, 0x8000000000008009, 0x000000000000008A,
+                                   0x0000000000000088, 0x0000000080008009, 0x000000008000000A,
+                                   0x000000008000808B, 0x800000000000008B, 0x8000000000008089,
+                                   0x8000000000008003, 0x8000000000008002, 0x8000000000000080,
+                                   0x000000000000800A, 0x800000008000000A, 0x8000000080008081,
+                                   0x8000000000008080, 0x0000000080000001, 0x8000000080008008],
+                                   dtype=np.uint64)
+    def __init__(self):
+        pass
+    
+    @staticmethod
+    def mac(key, message, output_size):
+
+        """ Pad/Compute Key """
+        key_pad = pad_10(key, 200)
+        key_array = np.frombuffer(key_pad, dtype=np.uint64, count=25, offset=0).reshape([5, 5], order='F')
+        kra_key = keecak(key_array, 6)
+
+        """ Pad Message """
+        msg_len = len(message)
+        kra_msg = pad_10(message, msg_len + (200 - (msg_len % 200)))
+        collector = np.zeros([5, 5], dtype=np.uint64)
+        absorb_steps = len(kra_msg) // 200
+
+        """ Absorb into Collector """
+        for x in range(absorb_steps):
+            m = np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=x * 200).reshape([5, 5], order='F')
+            m_k = m ^ kra_key
+            kra_key = kravatte_roll_single(kra_key)
+            collector = collector ^ keecak(m_k, 6)
+
+        """ Squeeze Collector """
+        collector = keecak(collector, 4)
+        kra_key = kravatte_roll_single(kra_key)
+
+        full_output_size = output_size + \
+            (200 - (output_size % 200)) if output_size % 200 else output_size
+        squeeze_steps = full_output_size // 200
+        output_buffer = b''
+
+        for x in range(squeeze_steps):
+            collector_squeeze = keecak(collector, 4)
+            collector = kravatte_roll_single(collector)
+            output_buffer += (collector_squeeze ^ kra_key).swapaxes(0, 1).tobytes()
+
+        return output_buffer[:output_size]
+
+    # def keecak(self, input_array, rounds_limit):
+
+    #     # print('Running Keccak %s' % rounds_limit)
+    #     state = np.copy(input_array)
+
+    #     for round_num in range(24 - rounds_limit, 24):
+
+    #         #theta_step:
+    #         tmp_array = np.copy(state)
+    #         array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
+    #         for x in range(5):
+    #             c1 = tmp_array[(x - 1) % 5, 0] ^
+    #                  tmp_array[(x - 1) % 5, 1] ^
+    #                  tmp_array[(x - 1) % 5, 2] ^
+    #                  tmp_array[(x - 1) % 5, 3] ^
+    #                  tmp_array[(x - 1) % 5, 4]
+    #             c2 = array_shift[(x + 1) % 5, 0] ^
+    #                  array_shift[(x + 1) % 5, 1] ^ 
+    #                  array_shift[(x + 1) % 5, 2] ^ 
+    #                  array_shift[(x + 1) % 5, 3] ^
+    #                  array_shift[(x + 1) % 5, 4]
+    #             d = c1 ^ c2
+    #             for y in range(5):
+    #                 state[x, y] = state[x, y] ^ d
+
+    #         #rho_step:
+    #         tmp_array = np.copy(state)
+    #         tracking_index = (1, 0)
+    #         for t in range(24):
+    #             t_shift = ((t + 1) * (t + 2) >> 1)
+    #             t_mod = t_shift % 64
+    #             target_lane = tmp_array[tracking_index] << np.uint64(
+    #                 t_mod) | tmp_array[tracking_index] >> np.uint64(64 - t_mod)
+    #             state[tracking_index] = target_lane
+    #             tracking_index = (tracking_index[1], ((
+    #                 2 * tracking_index[0]) + (3 * tracking_index[1])) % 5)
+
+    #         #pi_step:
+    #         tmp_array = np.copy(state)
+    #         it = np.nditer(tmp_array, flags=['multi_index'])
+    #         while not it.finished:
+    #             new_index = (it.multi_index[1], ((
+    #                 2 * it.multi_index[0]) + (3 * it.multi_index[1])) % 5)
+    #             state[new_index] = it[0]
+    #             it.iternext()
+
+    #         #chi_step:
+    #         tmp_array = np.copy(state)
+    #         it = np.nditer(tmp_array, flags=['multi_index'])
+    #         while not it.finished:
+    #             invert_lane = ~tmp_array[(it.multi_index[0] + 1) %
+    #                                     5, it.multi_index[1]]
+    #             and_lane = tmp_array[(it.multi_index[0] + 2) %
+    #                                 5, it.multi_index[1]]
+    #             new_value = (invert_lane & and_lane) ^ it[0]
+    #             state[it.multi_index] = new_value
+    #             it.iternext()
+
+    #         #iota_step:
+    #         state[0, 0] ^= KECCAK_ROUND_CONSTANTS[round_num]
+
+    #     return state
+
+
+
+
+
+
+############################### OLD ############################
+
+
+
 def keecak(input_array, rounds_limit):
 
     # print('Running Keccak %s' % rounds_limit)
@@ -22,12 +145,19 @@ def keecak(input_array, rounds_limit):
         #theta_step:
         tmp_array = np.copy(state)
         array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
-        for x in range(5):
-            c1 = tmp_array[(x - 1) % 5, 0] ^ tmp_array[(x - 1) % 5, 1] ^ tmp_array[(x - 1) % 5, 2] ^ tmp_array[(x - 1) % 5, 3] ^ tmp_array[(x - 1) % 5, 4]
-            c2 = array_shift[(x + 1) % 5, 0] ^ array_shift[(x + 1) % 5, 1] ^ array_shift[(x + 1) % 5, 2] ^ array_shift[(x + 1) % 5, 3] ^ array_shift[(x + 1) % 5, 4]
+        for wut, (foo, huf) in enumerate([(4,1),(0,2),(1,3),(2,4),(3,0)]):
+            c1 = reduce(lambda x, y: np.uint64(x) ^ np.uint64(y), tmp_array[foo], 0)
+            c2 = reduce(lambda x, y: np.uint64(x) ^ np.uint64(y), array_shift[huf], 0)
+            # np.bitwise_xor(casting='unsafe'), tmp_array[foo[0]], 0)
+            # c1 = tmp_array[foo[0] , 0] ^ tmp_array[foo[0], 1] ^ tmp_array[foo[0], 2] ^ tmp_array[foo[0], 3] ^ tmp_array[foo[0], 4]
+            # c2 = array_shift[foo[1], 0] ^ array_shift[foo[1], 1] ^ array_shift[foo[1],2] ^ array_shift[foo[1], 3] ^ array_shift[foo[1], 4]
+            # c1 = reduce(xor, tmp_array[foo[0]], 0)
+            # c2 = reduce(xor, tmp_array[foo[1]], 0)
+            
             d = c1 ^ c2
-            for y in range(5):
-                state[x, y] = state[x, y] ^ d
+            # for elements in range(5):
+            #     state[wut, elements] = state[wut, elements] ^ d
+            state[wut] = state[wut] ^ d
 
         #rho_step:
         tmp_array = np.copy(state)
@@ -105,7 +235,8 @@ def compute_kravatte(key, message, output_size):
 
     # Compute Key
     key_pad = pad_10(key, 200)
-    key_array = np.frombuffer(key_pad, dtype=np.uint64, count=25, offset=0).reshape(5,5).swapaxes(0,1)
+    # key_array = np.frombuffer(key_pad, dtype=np.uint64, count=25, offset=0).reshape(5,5).swapaxes(0,1)
+    key_array = np.frombuffer(key_pad, dtype=np.uint64, count=25, offset=0).reshape([5, 5], order='F')
     kra_key = keecak(key_array, 6)
 
     # Absorb
@@ -117,7 +248,7 @@ def compute_kravatte(key, message, output_size):
     absorb_steps = len(kra_msg) // 200
 
     for x in range(absorb_steps):
-        m = np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=x * 200).reshape([5, 5]).swapaxes(0,1)
+        m = np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=x * 200).reshape([5, 5], order='F')
         m_k = m ^ kra_key
         kra_key = kravatte_roll_single(kra_key)
         collector = collector ^ keecak(m_k, 6)
@@ -142,7 +273,7 @@ if __name__ == "__main__":
     my_key = b'\xFF' * 32
     my_messge = bytes([x % 256 for x in range(120000)])
     my_kra = compute_kravatte(my_key, my_messge, 2*1024*1024)
-    print(' '.join('{:02x}'.format(x) for x in my_kra))
+    # print(' '.join('{:02x}'.format(x) for x in my_kra))
     print(len(my_kra))
 
     # my_key = bytes([0xa9, 0xa8, 0xa7, 0xa6, 0xa5, 0xa4, 0xa3, 0xa2, 0xa1, 0xa0, 0x9f, 0x9e, 0x9d, 0x9c, 0x9b, 0x9a, 0x99, 0x98, 0x97, 0x96, 0x95, 0x94, 0x93, 0x92, 0x91, 0x90, 0x8f, 0x8e, 0x8d, 0x8c, 0x8b, 0x8a])
