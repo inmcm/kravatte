@@ -1,7 +1,5 @@
 # kravatte.py
 import numpy as np
-from operator import xor
-from functools import reduce
 
 KECCAK_ROUND_CONSTANTS = np.array([0x0000000000000001, 0x0000000000008082, 0x800000000000808A,
                                    0x8000000080008000, 0x000000000000808B, 0x0000000080000001,
@@ -145,19 +143,11 @@ def keecak(input_array, rounds_limit):
         #theta_step:
         tmp_array = np.copy(state)
         array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
-        for wut, (foo, huf) in enumerate([(4,1),(0,2),(1,3),(2,4),(3,0)]):
-            c1 = reduce(lambda x, y: np.uint64(x) ^ np.uint64(y), tmp_array[foo], 0)
-            c2 = reduce(lambda x, y: np.uint64(x) ^ np.uint64(y), array_shift[huf], 0)
-            # np.bitwise_xor(casting='unsafe'), tmp_array[foo[0]], 0)
-            # c1 = tmp_array[foo[0] , 0] ^ tmp_array[foo[0], 1] ^ tmp_array[foo[0], 2] ^ tmp_array[foo[0], 3] ^ tmp_array[foo[0], 4]
-            # c2 = array_shift[foo[1], 0] ^ array_shift[foo[1], 1] ^ array_shift[foo[1],2] ^ array_shift[foo[1], 3] ^ array_shift[foo[1], 4]
-            # c1 = reduce(xor, tmp_array[foo[0]], 0)
-            # c2 = reduce(xor, tmp_array[foo[1]], 0)
-            
+        for out_slice, (norm_slice, shift_slice) in enumerate([(4, 1), (0, 2), (1, 3), (2, 4), (3, 0)]):
+            c1 = tmp_array[norm_slice, 0] ^ tmp_array[norm_slice, 1] ^ tmp_array[norm_slice, 2] ^ tmp_array[norm_slice, 3] ^ tmp_array[norm_slice, 4]
+            c2 = array_shift[shift_slice, 0] ^ array_shift[shift_slice, 1] ^ array_shift[shift_slice, 2] ^ array_shift[shift_slice, 3] ^ array_shift[shift_slice, 4]    
             d = c1 ^ c2
-            # for elements in range(5):
-            #     state[wut, elements] = state[wut, elements] ^ d
-            state[wut] = state[wut] ^ d
+            state[out_slice] = state[out_slice] ^ d
 
         #rho_step:
         tmp_array = np.copy(state)
