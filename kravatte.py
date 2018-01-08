@@ -79,13 +79,22 @@ class Kravatte(object):
         self.digest = self.digest[:output_size]
 
     def _keecak(self, input_array, rounds_limit):
+        """
+        Implementation of Keccak-1600 PRF defined in FIPS 202
 
-        # print('Running Keccak %s' % rounds_limit)
+        Inputs:
+            input_array (numpy array): Keccak compatiable state array: 200-byte as 5x5 64-bit lanes
+            round_limit (int): number of rounds to apply Keccak function (6 or 4 for Kravatte)
+        Return:
+            numpy array: Keccak compatiable state array: 200-byte as 5x5 64-bit lanes
+        """
+
         state = np.copy(input_array)
 
         for round_num in range(24 - rounds_limit, 24):
 
-            #theta_step:
+            # theta_step:
+            # Exclusive-or each slice-lane by state based permuatative value
             tmp_array = np.copy(state)
             array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
             for out_slice, (norm_slice, shift_slice) in enumerate([(4, 1), (0, 2), (1, 3), (2, 4), (3, 0)]):
@@ -94,35 +103,23 @@ class Kravatte(object):
                 d = c1 ^ c2
                 state[out_slice] = state[out_slice] ^ d
 
-            #rho_step:
-            tmp_array = np.copy(state)
-            tracking_index = (1, 0)
-            for t in range(24):
-                t_shift = ((t + 1) * (t + 2) >> 1)
-                t_mod = t_shift % 64
-                target_lane = tmp_array[tracking_index] << np.uint64(
-                    t_mod) | tmp_array[tracking_index] >> np.uint64(64 - t_mod)
-                state[tracking_index] = target_lane
-                tracking_index = (tracking_index[1], ((
-                    2 * tracking_index[0]) + (3 * tracking_index[1])) % 5)
+            # rho_step:
+            # Left Rotate each lane by pre-calculated value
+            for state_lane, t_mod in np.nditer([state, self.RHO_SHIFTS], flags=['external_loop'], op_flags=[['readwrite'], ['readonly']]):
+                state_lane[...] = state_lane << t_mod | state_lane >> 64 - t_mod
 
             #pi_step:
-            tmp_array = np.copy(state)
-            it = np.nditer(tmp_array, flags=['multi_index'])
-            while not it.finished:
-                new_index = (it.multi_index[1], ((
-                    2 * it.multi_index[0]) + (3 * it.multi_index[1])) % 5)
-                state[new_index] = it[0]
-                it.iternext()
+            # Shuffle lanes to pre-calculated positions
+            state = state[self.PI_ROW_REORDER, self.PI_COLUMN_REORDER]
 
-            #chi_step:
+            # chi_step:
+            # Exclusive-or each individual lane based on and/invert permutation  
             tmp_array = np.copy(state)
             it = np.nditer(tmp_array, flags=['multi_index'])
             while not it.finished:
                 invert_lane = ~tmp_array[(it.multi_index[0] + 1) % 5, it.multi_index[1]]
                 and_lane = tmp_array[(it.multi_index[0] + 2) % 5, it.multi_index[1]]
-                new_value = (invert_lane & and_lane) ^ it[0]
-                state[it.multi_index] = new_value
+                state[it.multi_index] = (invert_lane & and_lane) ^ it[0]
                 it.iternext()
 
             #iota_step:
