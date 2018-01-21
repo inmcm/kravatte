@@ -7,13 +7,7 @@ class Kravatte(object):
     KECCAK_LANES = 25
     KECCAK_PLANES_SLICES = 5
 
-    KECCAK_ROUND_CONSTANTS = np.array([0x0000000000000001, 0x0000000000008082, 0x800000000000808A,
-                                       0x8000000080008000, 0x000000000000808B, 0x0000000080000001,
-                                       0x8000000080008081, 0x8000000000008009, 0x000000000000008A,
-                                       0x0000000000000088, 0x0000000080008009, 0x000000008000000A,
-                                       0x000000008000808B, 0x800000000000008B, 0x8000000000008089,
-                                       0x8000000000008003, 0x8000000000008002, 0x8000000000000080,
-                                       0x000000000000800A, 0x800000008000000A, 0x8000000080008081,
+    KECCAK_ROUND_CONSTANTS = np.array([0x000000000000800A, 0x800000008000000A, 0x8000000080008081,
                                        0x8000000000008080, 0x0000000080000001, 0x8000000080008008],
                                       dtype=np.uint64)
 
@@ -23,6 +17,12 @@ class Kravatte(object):
                            [28, 55, 25, 21, 56],
                            [27, 20, 39, 8, 14]], dtype=np.uint64)
 
+    CHI_REORDER = [(0, 1, 2),
+                   (1, 2, 3),
+                   (2, 3, 4),
+                   (3, 4, 0),
+                   (4, 0, 1)]
+    
     PI_ROW_REORDER = np.array([[0, 3, 1, 4, 2],
                                [1, 4, 2, 0, 3],
                                [2, 0, 3, 1, 4],
@@ -64,7 +64,7 @@ class Kravatte(object):
         """
         self.roll_key = np.copy(self.kra_key)
         self.collector = np.zeros([5, 5], dtype=np.uint64)
-        self.digest = b''
+        self.digest = bytearray(b'')
         self.digest_active = False
         self.new_collector = True
 
@@ -109,10 +109,10 @@ class Kravatte(object):
         for _ in range(generate_steps):
             collector_squeeze = self._keecak(self.collector, 4)
             self.collector = self._kravatte_roll(self.collector)
-            self.digest += (collector_squeeze ^ self.roll_key).tobytes('F')
+            self.digest.extend((collector_squeeze ^ self.roll_key).tobytes('F'))
 
         self.digest = self.digest[:output_size]
-
+    
     def _keecak(self, input_array, rounds_limit):
         """
         Implementation of Keccak-1600 PRF defined in FIPS 202
@@ -126,17 +126,16 @@ class Kravatte(object):
 
         state = np.copy(input_array)
 
-        for round_num in range(24 - rounds_limit, 24):
+        for round_num in range(6 - rounds_limit, 6):
 
             # theta_step:
             # Exclusive-or each slice-lane by state based permuatative value
             tmp_array = np.copy(state)
             array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
-            for out_slice, (norm_slice, shift_slice) in enumerate([(4, 1), (0, 2), (1, 3), (2, 4), (3, 0)]):
+            for out_slice, norm_slice, shift_slice in [(0, 4, 1), (1, 0, 2), (2, 1, 3), (3, 2, 4), (4, 3, 0)]:
                 c1 = tmp_array[norm_slice, 0] ^ tmp_array[norm_slice, 1] ^ tmp_array[norm_slice, 2] ^ tmp_array[norm_slice, 3] ^ tmp_array[norm_slice, 4]
                 c2 = array_shift[shift_slice, 0] ^ array_shift[shift_slice, 1] ^ array_shift[shift_slice, 2] ^ array_shift[shift_slice, 3] ^ array_shift[shift_slice, 4]
-                d = c1 ^ c2
-                state[out_slice] = state[out_slice] ^ d
+                state[out_slice] ^= c1 ^ c2
 
             # rho_step:
             # Left Rotate each lane by pre-calculated value
@@ -150,16 +149,12 @@ class Kravatte(object):
             # chi_step:
             # Exclusive-or each individual lane based on and/invert permutation  
             tmp_array = np.copy(state)
-            it = np.nditer(tmp_array, flags=['multi_index'])
-            while not it.finished:
-                invert_lane = ~tmp_array[(it.multi_index[0] + 1) % 5, it.multi_index[1]]
-                and_lane = tmp_array[(it.multi_index[0] + 2) % 5, it.multi_index[1]]
-                state[it.multi_index] = (invert_lane & and_lane) ^ it[0]
-                it.iternext()
+            for w, x, y in self.CHI_REORDER:
+                state[w] ^= ~tmp_array[x] & tmp_array[y]
 
             #iota_step:
             state[0, 0] ^= self.KECCAK_ROUND_CONSTANTS[round_num]
-
+            
         return state
 
     @staticmethod
@@ -207,12 +202,12 @@ def mac(key, message, output_size):
     return kravatte_mac_gen.digest
 
 if __name__ == "__main__":
-    from time import monotonic
+    from time import perf_counter
     my_key = b'\xFF' * 32
     my_messge = bytes([x % 256 for x in range(120000)])
-    start = monotonic()
-    my_kra = mac(my_key, my_messge, 2*1024*1024)
-    stop = monotonic()
+    start = perf_counter()
+    my_kra = mac(my_key, my_messge, 4*1024*1024)
+    stop = perf_counter()
     print("Process Time:", stop-start)
     # print(' '.join('{:02x}'.format(x) for x in my_kra))
     print(len(my_kra))
