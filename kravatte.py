@@ -222,6 +222,24 @@ class Kravatte(object):
         padded_bytes = input_bytes + b'\x01' + (b'\x00' * (pad_len - 1))
         return padded_bytes
 
+    @staticmethod    
+    def compare_bytes(a, b):
+        """
+        Time Constant Byte Comparison Function
+        Inputs:
+            a (bytes): first set of bytes 
+            b (bytes): second set of bytes 
+        Return:
+            boolean
+        """
+        compare = True
+        if len(a) != len(b):
+            return False
+        for (element_a, element_b) in zip(a, b):
+            compare = compare and (element_a == element_b)
+        return compare
+        
+
 def mac(key, message, output_size):
     """
     Kravatte Message Authenication Code Generation of given length from a message
@@ -240,6 +258,75 @@ def mac(key, message, output_size):
     kravatte_mac_gen.collect_message(message)
     kravatte_mac_gen.generate_digest(output_size)
     return kravatte_mac_gen.digest
+
+def siv_wrap(key, message, metadata, tag_size=32):
+    """
+    Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and 
+    metadata using the Synthetic Intialization Vector method described in the Farfalle/Kravatte 
+    spec. Generates ciphertext (of equivalent length to the plaintext) and verification tag.
+    
+    Args:
+        key (bytes): Encryption key; 0-200 bytes in length
+        message (bytes): Plaintext message for 
+        metadata (bytes): The first parameter.
+        tag_size (int, optional): The tag size in bytes. Defaults to 32 bytes as defined in the 
+            Kravatte spec
+
+    Returns:
+        tuple (bytes, bytes): Bytes of ciphertext and tag
+    """
+    # Initialize Kravatte 
+    kravatte_siv_wrap = Kravatte(key)
+    
+    # Generate Tag From Metadata and Plaintext
+    kravatte_siv_wrap.collect_message(metadata)
+    kravatte_siv_wrap.collect_message(message)
+    kravatte_siv_wrap.generate_digest(tag_size)
+    siv_tag = kravatte_siv_wrap.digest
+
+    # Generate Key Stream 
+    kravatte_siv_wrap.collect_message(metadata)
+    kravatte_siv_wrap.collect_message(siv_tag)
+    kravatte_siv_wrap.generate_digest(len(message))
+    ciphertext = bytes([p_text^key_stream for p_text, key_stream in zip(message, kravatte_siv_wrap.digest)])
+    return ciphertext, siv_tag
+
+def siv_unwrap(key, ciphertext, siv_tag, metadata):
+    """
+    Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and 
+    metadata using the Synthetic Intialization Vector method described in the Farfalle/Kravatte 
+    spec. Generates ciphertext (of equivalent length to the plaintext) and verification tag.
+    
+    Args:
+        key (bytes): Encryption key; 0-200 bytes in length
+        message (bytes): Plaintext message for 
+        metadata (bytes): The first parameter.
+        tag_size (int, optional): The tag size in bytes. Defaults to 32 bytes as defined in the 
+            Kravatte spec
+
+    Returns:
+        tuple (bytes, bytes): Bytes of ciphertext and tag
+    """
+    
+    # Initialize Kravatte
+    kravatte_siv_unwrap = Kravatte(key)
+
+    # Re-Generate Key Stream 
+    kravatte_siv_unwrap.collect_message(metadata)
+    kravatte_siv_unwrap.collect_message(siv_tag)
+    kravatte_siv_unwrap.generate_digest(len(ciphertext))
+    siv_plaintext = bytes([p_text^key_stream for p_text, key_stream in zip(ciphertext, kravatte_siv_unwrap.digest)])
+
+    # Re-Generate Tag From Metadata and Recovered Plaintext
+    kravatte_siv_unwrap.collect_message(metadata)
+    kravatte_siv_unwrap.collect_message(siv_plaintext)
+    kravatte_siv_unwrap.generate_digest(len(siv_tag))
+    generated_tag = kravatte_siv_unwrap.digest
+
+    # Check if tag matches provided tag matches reconstituted tag
+    valid_tag = kravatte_siv_unwrap.compare_bytes(siv_tag, generated_tag)
+    return siv_plaintext, valid_tag
+
 
 if __name__ == "__main__":
     from time import perf_counter
