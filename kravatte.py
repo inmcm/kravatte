@@ -1,41 +1,62 @@
-# kravatte.py
+"""
+Kravatte Cipher Suite: Encryption, Decryption, and Authenication Tools based on the Farfalle modes
+Copyright 2018 Michael Calvin McCoy
+"""
 import numpy as np
 
 
 class Kravatte(object):
+    """Implementation of the Farfalle Psuedo-Random Function (PRF) construct utilizing the 
+    Keccak-1600 permutation.
+    """
     KECCACK_BYTES = 200
+    '''Number of Bytes in Keccak-1600 state'''
     KECCAK_LANES = 25
-    KECCAK_PLANES_SLICES = 5
+    '''Number of 8-Byte lanes in Keccak-1600 state'''
 
-    KECCAK_ROUND_CONSTANTS = np.array([0x000000000000800A, 0x800000008000000A, 0x8000000080008081,
-                                       0x8000000000008080, 0x0000000080000001, 0x8000000080008008],
-                                      dtype=np.uint64)
+    KECCAK_PLANES_SLICES = 5
+    ''' Size of x/y dimensions of Keccak lane array  '''
+
+    IOTA_CONSTANTS = np.array([0x000000000000800A, 0x800000008000000A, 0x8000000080008081,
+                               0x8000000000008080, 0x0000000080000001, 0x8000000080008008],
+                              dtype=np.uint64)
+    '''Iota Step Round Constants For Keecak-p(1600, 4) and Keecak-p(1600, 6)'''
 
     RHO_SHIFTS = np.array([[0, 36, 3, 41, 18],
                            [1, 44, 10, 45, 2],
                            [62, 6, 43, 15, 61],
                            [28, 55, 25, 21, 56],
                            [27, 20, 39, 8, 14]], dtype=np.uint64)
+    '''Lane Shifts for Rho Step'''
 
     CHI_REORDER = [(0, 1, 2),
                    (1, 2, 3),
                    (2, 3, 4),
                    (3, 4, 0),
                    (4, 0, 1)]
+    '''Lane Re-order Mapping for Chi Step'''
     
     PI_ROW_REORDER = np.array([[0, 3, 1, 4, 2],
                                [1, 4, 2, 0, 3],
                                [2, 0, 3, 1, 4],
                                [3, 1, 4, 2, 0],
                                [4, 2, 0, 3, 1]])
+    '''Row Re-order Mapping for Pi Step'''
 
     PI_COLUMN_REORDER = np.array([[0, 0, 0, 0, 0],
                                   [1, 1, 1, 1, 1],
                                   [2, 2, 2, 2, 2],
                                   [3, 3, 3, 3, 3],
                                   [4, 4, 4, 4, 4]])
+    '''Column Re-order Mapping for Pi Step'''
 
     def __init__(self, key=b''):
+        """
+        Initialize Kravatte with user key
+
+        Inputs:
+            key (bytes)
+        """
         self.update_key(key)
         self.reset_state()
 
@@ -77,10 +98,10 @@ class Kravatte(object):
         """
         if self.digest_active:
             self.reset_state()
-        
+
         if self.new_collector:
             self.new_collector = False
-        else:    
+        else:
             self.roll_key = self._kravatte_roll(self.roll_key)
 
         # Pad Message
@@ -96,8 +117,12 @@ class Kravatte(object):
             self.collector = self.collector ^ self._keecak(m_k, 6)
 
     def generate_digest(self, output_size):
-
-        """ Squeeze Collector """
+        """
+        Squeeze an arbitrary number of bytes from collector state
+        
+        Inputs:
+            output_size (int): Number of bytes to generate and store in Kravatte digest parameter
+        """
         if not self.digest_active:
             self.collector = self._keecak(self.collector, 4)
             self.roll_key = self._kravatte_roll(self.roll_key)
@@ -153,8 +178,8 @@ class Kravatte(object):
                 state[w] ^= ~tmp_array[x] & tmp_array[y]
 
             #iota_step:
-            state[0, 0] ^= self.KECCAK_ROUND_CONSTANTS[round_num]
-            
+            # Exlusive-or first lane of state with round constant 
+            state[0, 0] ^= self.IOTA_CONSTANTS[round_num]
         return state
 
     @staticmethod
@@ -186,7 +211,9 @@ class Kravatte(object):
 
         Inputs:
             input_bytes (bytes): Collection of bytes
-            desired_length (int):
+            desired_length (int): Number of bytes to pad input len out to
+        Return:
+            bytes: input bytes with padding applied
         """
         start_len = len(input_bytes)
         if start_len == desired_length:
