@@ -223,6 +223,19 @@ class Kravatte(object):
         return padded_bytes
 
 def mac(key, message, output_size):
+    """
+    Kravatte Message Authenication Code Generation of given length from a message
+    based on a user provided key 
+
+    Args:
+        key (bytes): User authenication key (0 - 200 bytes)
+        message (bytes): User message
+        output_size (int): Size of authenicated digest in bytes 
+
+    Returns:
+        bytes    
+    
+    """
     kravatte_mac_gen = Kravatte(key)
     kravatte_mac_gen.collect_message(message)
     kravatte_mac_gen.generate_digest(output_size)
