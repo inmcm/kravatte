@@ -263,7 +263,8 @@ def siv_wrap(key, message, metadata, tag_size=32):
     """
     Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and 
     metadata using the Synthetic Intialization Vector method described in the Farfalle/Kravatte 
-    spec. Generates ciphertext (of equivalent length to the plaintext) and verification tag.
+    spec. Generates ciphertext (of equivalent length to the plaintext) and verification tag. Inverse
+    of siv_unwrap function.
     
     Args:
         key (bytes): Encryption key; 0-200 bytes in length
@@ -293,19 +294,19 @@ def siv_wrap(key, message, metadata, tag_size=32):
 
 def siv_unwrap(key, ciphertext, siv_tag, metadata):
     """
-    Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and 
-    metadata using the Synthetic Intialization Vector method described in the Farfalle/Kravatte 
-    spec. Generates ciphertext (of equivalent length to the plaintext) and verification tag.
+    Decryption of Synthetic Intialization Vector method described in the Farfalle/Kravatte 
+    spec. Given a key, metadata, and validation tag, generates plaintext (of equivalent length to 
+    the ciphertext) and validates message based on included tag, metadata, and key. Inverse of
+    siv_wrap function.
     
     Args:
         key (bytes): Encryption key; 0-200 bytes in length
         message (bytes): Plaintext message for 
+        siv_tag (bytes): The first parameter.
         metadata (bytes): The first parameter.
-        tag_size (int, optional): The tag size in bytes. Defaults to 32 bytes as defined in the 
-            Kravatte spec
 
     Returns:
-        tuple (bytes, bytes): Bytes of ciphertext and tag
+        tuple (bytes, boolean): Bytes of plaintext and message validation boolean
     """
     
     # Initialize Kravatte
