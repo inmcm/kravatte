@@ -298,8 +298,8 @@ def siv_wrap(key, message, metadata, tag_size=32):
     
     Args:
         key (bytes): Encryption key; 0-200 bytes in length
-        message (bytes): Plaintext message for 
-        metadata (bytes): The first parameter.
+        message (bytes): Plaintext message for encryption
+        metadata (bytes): Nonce/Seed value for authenicated encryption
         tag_size (int, optional): The tag size in bytes. Defaults to 32 bytes as defined in the 
             Kravatte spec
 
@@ -331,9 +331,9 @@ def siv_unwrap(key, ciphertext, siv_tag, metadata):
     
     Args:
         key (bytes): Encryption key; 0-200 bytes in length
-        message (bytes): Plaintext message for 
-        siv_tag (bytes): The first parameter.
-        metadata (bytes): The first parameter.
+        ciphertext (bytes): Ciphertext SIV Message
+        siv_tag (bytes): Authenicating byte string
+        metadata (bytes): Metadata used to encrpt message and generate tag
 
     Returns:
         tuple (bytes, boolean): Bytes of plaintext and message validation boolean
