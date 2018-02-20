@@ -6,7 +6,7 @@ https://eprint.iacr.org/2016/1188.pdf
 
 
 ## MAC
-The most basic mode of Kravatte is a pseudo-random function (PSRF). Kravvate can absorb an arbitary sized user message and key and output a arbitary collection of pseudo-random bytes that can act as a message authenication code.
+The most basic mode of Kravatte is a pseudo-random function (PRF). Kravvate can absorb an arbitary sized user message and key and output a arbitary collection of pseudo-random bytes that can act as a message authenication code.
 ``` python
 >>> from kravatte import mac
 >>> from binascii import hexlify
