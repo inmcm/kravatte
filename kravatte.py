@@ -1,5 +1,5 @@
 """
-Kravatte Cipher Suite: Encryption, Decryption, and Authenication Tools based on the Farfalle modes
+Kravatte Achouffe Cipher Suite: Encryption, Decryption, and Authenication Tools based on the Farfalle modes
 Copyright 2018 Michael Calvin McCoy
 """
 import numpy as np
@@ -69,7 +69,7 @@ class Kravatte(object):
         """
         key_pad = self._pad_10(key, self.KECCACK_BYTES)
         key_array = np.frombuffer(key_pad, dtype=np.uint64, count=self.KECCAK_LANES, offset=0).reshape([self.KECCAK_PLANES_SLICES, self.KECCAK_PLANES_SLICES], order='F')
-        self.kra_key = self._keecak(key_array, 6)
+        self.kra_key = self._keecak(key_array)
 
     def reset_state(self):
         """
@@ -102,7 +102,7 @@ class Kravatte(object):
         if self.new_collector:
             self.new_collector = False
         else:
-            self.roll_key = self._kravatte_roll(self.roll_key)
+            self.roll_key = self._kravatte_roll_compress(self.roll_key)
 
         # Pad Message
         msg_len = len(message)
@@ -113,8 +113,8 @@ class Kravatte(object):
         for msg_block in range(absorb_steps):
             m = np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F')
             m_k = m ^ self.roll_key
-            self.roll_key = self._kravatte_roll(self.roll_key)
-            self.collector = self.collector ^ self._keecak(m_k, 6)
+            self.roll_key = self._kravatte_roll_compress(self.roll_key)
+            self.collector = self.collector ^ self._keecak(m_k)
 
     def generate_digest(self, output_size):
         """
@@ -124,34 +124,33 @@ class Kravatte(object):
             output_size (int): Number of bytes to generate and store in Kravatte digest parameter
         """
         if not self.digest_active:
-            self.collector = self._keecak(self.collector, 4)
-            self.roll_key = self._kravatte_roll(self.roll_key)
+            self.collector = self._keecak(self.collector)
+            self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.digest_active = True
 
         full_output_size = output_size + (200 - (output_size % 200)) if output_size % 200 else output_size
         generate_steps = full_output_size // 200
 
         for _ in range(generate_steps):
-            collector_squeeze = self._keecak(self.collector, 4)
-            self.collector = self._kravatte_roll(self.collector)
+            collector_squeeze = self._keecak(self.collector)
+            self.collector = self._kravatte_roll_expand(self.collector)
             self.digest.extend((collector_squeeze ^ self.roll_key).tobytes('F'))
 
         self.digest = self.digest[:output_size]
     
-    def _keecak(self, input_array, rounds_limit):
+    def _keecak(self, input_array):
         """
         Implementation of Keccak-1600 PRF defined in FIPS 202
 
         Inputs:
             input_array (numpy array): Keccak compatiable state array: 200-byte as 5x5 64-bit lanes
-            round_limit (int): number of rounds to apply Keccak function (6 or 4 for Kravatte)
         Return:
             numpy array: Keccak compatiable state array: 200-byte as 5x5 64-bit lanes
         """
 
         state = np.copy(input_array)
 
-        for round_num in range(6 - rounds_limit, 6):
+        for round_num in range(6):
 
             # theta_step:
             # Exclusive-or each slice-lane by state based permuatative value
@@ -183,9 +182,9 @@ class Kravatte(object):
         return state
 
     @staticmethod
-    def _kravatte_roll(input_array):
+    def _kravatte_roll_compress(input_array):
         """
-        Kravatte defined upper plane permutation functions
+        Kravatte defined roll function for compression side of Farfalle PRF
 
         Inputs:
             input_array (numpy array): Keccak compatiable state array: 200-byte as 5x5 64-bit lanes
@@ -194,14 +193,45 @@ class Kravatte(object):
         """
         state = np.copy(input_array)
         tmp_plane = state[0:5, 4]
-        lane_0 = tmp_plane[0]
         tmp_plane[0] = tmp_plane[1]
         tmp_plane[1] = tmp_plane[2]
         tmp_plane[2] = tmp_plane[3]
         tmp_plane[3] = tmp_plane[4]
-        rotate_lane = ((lane_0 << np.uint64(7)) | (lane_0 >> np.uint64(57)))
-        tmp_plane[4] = rotate_lane ^ tmp_plane[0] ^ (tmp_plane[0] >> np.uint64(3))
+        rotate_lane = ((input_array[0][4] << np.uint64(7)) | (input_array[0][4] >> np.uint64(57)))
+        tmp_plane[4] = rotate_lane ^ input_array[1][4] ^ (input_array[1][4] >> np.uint64(3))
         state[0:5, 4] = tmp_plane
+        return state
+
+    @staticmethod
+    def _kravatte_roll_expand(input_array):
+        """
+        Kravatte defined roll function for expansion side of Farfalle PRF
+
+        Inputs:
+            input_array (numpy array): Keccak compatiable state array: 200-byte as 5x5 64-bit lanes
+        Return:
+            numpy array: Keccak compatiable state array: 200-byte as 5x5 64-bit lanes
+        """
+        state = np.copy(input_array)
+        tmp_plane_3 = state[0:5, 3]
+        tmp_plane_4 = state[0:5, 4]
+
+        tmp_plane_3[0] = tmp_plane_3[1]
+        tmp_plane_3[1] = tmp_plane_3[2]
+        tmp_plane_3[2] = tmp_plane_3[3]
+        tmp_plane_3[3] = tmp_plane_3[4]
+        tmp_plane_3[4] = tmp_plane_4[0]
+
+        tmp_plane_4[0] = tmp_plane_4[1]
+        tmp_plane_4[1] = tmp_plane_4[2]
+        tmp_plane_4[2] = tmp_plane_4[3]
+        tmp_plane_4[3] = tmp_plane_4[4]
+
+        rotate_lane_7 = ((input_array[0][3] << np.uint64(7)) | (input_array[0][3] >> np.uint64(57)))
+        rotate_lane_18 = ((input_array[1][3] << np.uint64(18)) | (input_array[1][3] >> np.uint64(46)))
+        tmp_plane_4[4] = rotate_lane_7 ^ rotate_lane_18 ^ ((input_array[1][3] >> np.uint64(1)) & input_array[2][3])
+        state[0:5, 3] = tmp_plane_3
+        state[0:5, 4] = tmp_plane_4
         return state
 
     @staticmethod
@@ -332,10 +362,9 @@ def siv_unwrap(key, ciphertext, siv_tag, metadata):
 if __name__ == "__main__":
     from time import perf_counter
     my_key = b'\xFF' * 32
-    my_messge = bytes([x % 256 for x in range(120000)])
+    my_message = bytes([x % 256 for x in range(4*1024*1024)])
     start = perf_counter()
-    my_kra = mac(my_key, my_messge, 4*1024*1024)
+    my_kra = mac(my_key, my_message, 4*1024*1024)
     stop = perf_counter()
     print("Process Time:", stop-start)
-    # print(' '.join('{:02x}'.format(x) for x in my_kra))
     print(len(my_kra))
