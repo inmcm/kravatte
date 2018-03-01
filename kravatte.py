@@ -359,6 +359,106 @@ def siv_unwrap(key, ciphertext, siv_tag, metadata):
     return siv_plaintext, valid_tag
 
 
+class KravatteSAE(Kravatte):
+    TAG_SIZE = 16
+    OFFSET = TAG_SIZE
+
+    def __init__(self, nonce, key=b''):
+        super(KravatteSAE, self).__init__(key)
+        self.initialize_history(nonce)
+
+    def initialize_history(self, nonce):
+        """
+        Pad and compute new Kravatte base key from bytes source.
+
+        Inputs:
+            key (bytes): user provided bytes to be padded (if nesscessary) and computed into Kravatte base key 
+        """
+        self.collect_message(nonce)
+        self.history_collector = np.copy(self.collector)
+        self.history_key = np.copy(self.roll_key)
+        self.generate_digest(self.TAG_SIZE)
+        self.tag = self.digest.copy()
+
+    def sae_wrap(self, plaintext, metadata):    
+        # Generate Key Stream 
+        self.collector = np.copy(self.history_collector)
+        self.kra_key = np.copy(self.history_key)
+        self.generate_digest(len(plaintext)+ self.OFFSET)
+        ciphertext = bytes([p_text^key_stream for p_text, key_stream in zip(plaintext, self.digest[self.OFFSET,])])
+
+        # Update History
+        self.collector = np.copy(self.history_collector)
+        self.roll_key = np.copy(self.history_key)
+
+        if len(metadata) > 0 or len(plaintext) == 0:
+            self.append_to_history(metadata, 0)
+        
+        if len(plaintext) > 0:
+            self.append_to_history(ciphertext, 1)
+
+        self.generate_digest(self.TAG_SIZE)
+        self.history = self.digest.copy()
+
+        return ciphertext, self.history
+
+    def sae_unwrap(self, ciphertext, metadata, validation_tag):
+        # Generate Key Stream 
+        self.collector = np.copy(self.history_collector)
+        self.kra_key = np.copy(self.history_key)
+        self.generate_digest(len(ciphertext)+ self.OFFSET)
+        plaintext = bytes([p_text^key_stream for p_text, key_stream in zip(ciphertext, self.digest[self.OFFSET,])])
+
+        # Update History
+        self.collect_message(self.history)
+
+        if len(metadata) > 0 or len(ciphertext) == 0:
+            self.append_to_history(metadata, 0)
+        
+        if len(ciphertext) > 0:
+            self.append_to_history(ciphertext, 1)
+
+        self.history_collector = np.copy(self.collector)
+        self.history_key = np.copy(self.roll_key)
+        self.generate_digest(self.TAG_SIZE)
+
+        self.tag = self.digest.copy()
+
+        valid_tag = self.compare_bytes(self.tag, validation_tag)
+        
+        return plaintext, valid_tag
+
+    def append_to_history(self, message, pad_bit):
+        """
+        Pad and Process Blocks of Message into collector state
+
+        Inputs:
+            message (bytes)
+        """
+        if self.digest_active:
+            self.collector = np.copy(self.history_collector)
+            self.roll_key = np.copy(self.history_key)
+            self.digest = bytearray(b'')
+            self.digest_active = False
+
+        self.roll_key = self._kravatte_roll_compress(self.roll_key)
+
+        # Pad Message with a single bit and then 
+        start_len = len(message)
+        pad_len = start_len + (self.KECCACK_BYTES - (start_len % self.KECCACK_BYTES))
+        start_pad = b'\x03' if pad_bit == 1 else b'\x02'
+        padded_bytes = message + start_pad + (b'\x00' * (pad_len - 1))
+        absorb_steps = len(padded_bytes) // self.KECCACK_BYTES
+
+        # Absorb into Collector
+        for msg_block in range(absorb_steps):
+            m = np.frombuffer(padded_bytes, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F')
+            m_k = m ^ self.roll_key
+            self.roll_key = self._kravatte_roll_compress(self.roll_key)
+            self.collector = self.collector ^ self._keecak(m_k)
+
+
+
 if __name__ == "__main__":
     from time import perf_counter
     my_key = b'\xFF' * 32
