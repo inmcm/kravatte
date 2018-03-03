@@ -381,37 +381,45 @@ class KravatteSAE(Kravatte):
         self.tag = self.digest.copy()
 
     def sae_wrap(self, plaintext, metadata):    
-        # Generate Key Stream 
+
+        # Restore Kravatte State to When Latest History was Absorbed
         self.collector = np.copy(self.history_collector)
         self.kra_key = np.copy(self.history_key)
+        self.digest = bytearray(b'')
+        self.digest_active = False
+
+        # Generate/Apply Key Stream
         self.generate_digest(len(plaintext)+ self.OFFSET)
-        ciphertext = bytes([p_text^key_stream for p_text, key_stream in zip(plaintext, self.digest[self.OFFSET,])])
+        ciphertext = bytes([p_text^key_stream for p_text, key_stream in zip(plaintext, self.digest[self.OFFSET:])])
 
         # Update History
-        self.collector = np.copy(self.history_collector)
-        self.roll_key = np.copy(self.history_key)
-
         if len(metadata) > 0 or len(plaintext) == 0:
             self.append_to_history(metadata, 0)
         
         if len(plaintext) > 0:
             self.append_to_history(ciphertext, 1)
 
-        self.generate_digest(self.TAG_SIZE)
-        self.history = self.digest.copy()
+        self.history_collector = np.copy(self.collector)
+        self.history_key = np.copy(self.roll_key)
 
-        return ciphertext, self.history
+        # Generate Tag
+        self.generate_digest(self.TAG_SIZE)
+
+        return ciphertext, self.digest
 
     def sae_unwrap(self, ciphertext, metadata, validation_tag):
-        # Generate Key Stream 
+
+        # Restore Kravatte State to When Latest History was Absorbed
         self.collector = np.copy(self.history_collector)
         self.kra_key = np.copy(self.history_key)
+        self.digest = bytearray(b'')
+        self.digest_active = False
+
+        # Generate/Apply Key Stream
         self.generate_digest(len(ciphertext)+ self.OFFSET)
-        plaintext = bytes([p_text^key_stream for p_text, key_stream in zip(ciphertext, self.digest[self.OFFSET,])])
+        plaintext = bytes([p_text^key_stream for p_text, key_stream in zip(ciphertext, self.digest[self.OFFSET:])])
 
         # Update History
-        self.collect_message(self.history)
-
         if len(metadata) > 0 or len(ciphertext) == 0:
             self.append_to_history(metadata, 0)
         
@@ -420,10 +428,12 @@ class KravatteSAE(Kravatte):
 
         self.history_collector = np.copy(self.collector)
         self.history_key = np.copy(self.roll_key)
+        
+        # Generate Tag
         self.generate_digest(self.TAG_SIZE)
 
+        # Store Generated Tag and Validate
         self.tag = self.digest.copy()
-
         valid_tag = self.compare_bytes(self.tag, validation_tag)
         
         return plaintext, valid_tag
