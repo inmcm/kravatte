@@ -35,7 +35,7 @@ class Kravatte(object):
                    (3, 4, 0),
                    (4, 0, 1)]
     '''Lane Re-order Mapping for Chi Step'''
-    
+
     PI_ROW_REORDER = np.array([[0, 3, 1, 4, 2],
                                [1, 4, 2, 0, 3],
                                [2, 0, 3, 1, 4],
@@ -81,7 +81,7 @@ class Kravatte(object):
             - Digest Active and New Collector Flags
 
         Inputs:
-            None 
+            None
         """
         self.roll_key = np.copy(self.kra_key)
         self.collector = np.zeros([5, 5], dtype=np.uint64)
@@ -119,7 +119,7 @@ class Kravatte(object):
     def generate_digest(self, output_size):
         """
         Squeeze an arbitrary number of bytes from collector state
-        
+
         Inputs:
             output_size (int): Number of bytes to generate and store in Kravatte digest parameter
         """
@@ -137,7 +137,7 @@ class Kravatte(object):
             self.digest.extend((collector_squeeze ^ self.roll_key).tobytes('F'))
 
         self.digest = self.digest[:output_size]
-    
+
     def _keecak(self, input_array):
         """
         Implementation of Keccak-1600 PRF defined in FIPS 202
@@ -171,13 +171,13 @@ class Kravatte(object):
             state = state[self.PI_ROW_REORDER, self.PI_COLUMN_REORDER]
 
             # chi_step:
-            # Exclusive-or each individual lane based on and/invert permutation  
+            # Exclusive-or each individual lane based on and/invert permutation
             tmp_array = np.copy(state)
             for w, x, y in self.CHI_REORDER:
                 state[w] ^= ~tmp_array[x] & tmp_array[y]
 
             #iota_step:
-            # Exlusive-or first lane of state with round constant 
+            # Exlusive-or first lane of state with round constant
             state[0, 0] ^= self.IOTA_CONSTANTS[round_num]
         return state
 
@@ -252,13 +252,13 @@ class Kravatte(object):
         padded_bytes = input_bytes + b'\x01' + (b'\x00' * (pad_len - 1))
         return padded_bytes
 
-    @staticmethod    
+    @staticmethod
     def compare_bytes(a, b):
         """
         Time Constant Byte Comparison Function
         Inputs:
-            a (bytes): first set of bytes 
-            b (bytes): second set of bytes 
+            a (bytes): first set of bytes
+            b (bytes): second set of bytes
         Return:
             boolean
         """
@@ -268,21 +268,20 @@ class Kravatte(object):
         for (element_a, element_b) in zip(a, b):
             compare = compare and (element_a == element_b)
         return compare
-        
+
 
 def mac(key, message, output_size):
     """
     Kravatte Message Authenication Code Generation of given length from a message
-    based on a user provided key 
+    based on a user provided key
 
     Args:
         key (bytes): User authenication key (0 - 200 bytes)
         message (bytes): User message
-        output_size (int): Size of authenicated digest in bytes 
+        output_size (int): Size of authenicated digest in bytes
 
     Returns:
-        bytes    
-    
+        bytes: message authentication bytes of length output_size
     """
     kravatte_mac_gen = Kravatte(key)
     kravatte_mac_gen.collect_message(message)
@@ -291,35 +290,35 @@ def mac(key, message, output_size):
 
 def siv_wrap(key, message, metadata, tag_size=32):
     """
-    Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and 
-    metadata using the Synthetic Intialization Vector method described in the Farfalle/Kravatte 
+    Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and
+    metadata using the Synthetic Intialization Vector method described in the Farfalle/Kravatte
     spec. Generates ciphertext (of equivalent length to the plaintext) and verification tag. Inverse
     of siv_unwrap function.
-    
+
     Args:
         key (bytes): Encryption key; 0-200 bytes in length
         message (bytes): Plaintext message for encryption
         metadata (bytes): Nonce/Seed value for authenicated encryption
-        tag_size (int, optional): The tag size in bytes. Defaults to 32 bytes as defined in the 
+        tag_size (int, optional): The tag size in bytes. Defaults to 32 bytes as defined in the
             Kravatte spec
 
     Returns:
         tuple (bytes, bytes): Bytes of ciphertext and tag
     """
-    # Initialize Kravatte 
+    # Initialize Kravatte
     kravatte_siv_wrap = Kravatte(key)
-    
+
     # Generate Tag From Metadata and Plaintext
     kravatte_siv_wrap.collect_message(metadata)
     kravatte_siv_wrap.collect_message(message)
     kravatte_siv_wrap.generate_digest(tag_size)
     siv_tag = kravatte_siv_wrap.digest
 
-    # Generate Key Stream 
+    # Generate Key Stream
     kravatte_siv_wrap.collect_message(metadata)
     kravatte_siv_wrap.collect_message(siv_tag)
     kravatte_siv_wrap.generate_digest(len(message))
-    ciphertext = bytes([p_text^key_stream for p_text, key_stream in zip(message, kravatte_siv_wrap.digest)])
+    ciphertext = bytes([p_text ^ key_stream for p_text, key_stream in zip(message, kravatte_siv_wrap.digest)])
     return ciphertext, siv_tag
 
 def siv_unwrap(key, ciphertext, siv_tag, metadata):
@@ -328,7 +327,7 @@ def siv_unwrap(key, ciphertext, siv_tag, metadata):
     spec. Given a key, metadata, and validation tag, generates plaintext (of equivalent length to 
     the ciphertext) and validates message based on included tag, metadata, and key. Inverse of
     siv_wrap function.
-    
+
     Args:
         key (bytes): Encryption key; 0-200 bytes in length
         ciphertext (bytes): Ciphertext SIV Message
@@ -338,7 +337,7 @@ def siv_unwrap(key, ciphertext, siv_tag, metadata):
     Returns:
         tuple (bytes, boolean): Bytes of plaintext and message validation boolean
     """
-    
+
     # Initialize Kravatte
     kravatte_siv_unwrap = Kravatte(key)
 
@@ -346,7 +345,7 @@ def siv_unwrap(key, ciphertext, siv_tag, metadata):
     kravatte_siv_unwrap.collect_message(metadata)
     kravatte_siv_unwrap.collect_message(siv_tag)
     kravatte_siv_unwrap.generate_digest(len(ciphertext))
-    siv_plaintext = bytes([p_text^key_stream for p_text, key_stream in zip(ciphertext, kravatte_siv_unwrap.digest)])
+    siv_plaintext = bytes([p_text ^ key_stream for p_text, key_stream in zip(ciphertext, kravatte_siv_unwrap.digest)])
 
     # Re-Generate Tag From Metadata and Recovered Plaintext
     kravatte_siv_unwrap.collect_message(metadata)
@@ -384,18 +383,18 @@ class KravatteSAE(Kravatte):
 
         # Restore Kravatte State to When Latest History was Absorbed
         self.collector = np.copy(self.history_collector)
-        self.kra_key = np.copy(self.history_key)
+        self.roll_key = np.copy(self.history_key)
         self.digest = bytearray(b'')
         self.digest_active = False
 
         # Generate/Apply Key Stream
-        self.generate_digest(len(plaintext)+ self.OFFSET)
-        ciphertext = bytes([p_text^key_stream for p_text, key_stream in zip(plaintext, self.digest[self.OFFSET:])])
+        self.generate_digest(len(plaintext) + self.OFFSET)
+        ciphertext = bytes([p_text ^ key_stream for p_text, key_stream in zip(plaintext, self.digest[self.OFFSET:])])
 
         # Update History
         if len(metadata) > 0 or len(plaintext) == 0:
             self.append_to_history(metadata, 0)
-        
+
         if len(plaintext) > 0:
             self.append_to_history(ciphertext, 1)
 
@@ -411,31 +410,31 @@ class KravatteSAE(Kravatte):
 
         # Restore Kravatte State to When Latest History was Absorbed
         self.collector = np.copy(self.history_collector)
-        self.kra_key = np.copy(self.history_key)
+        self.roll_key = np.copy(self.history_key)
         self.digest = bytearray(b'')
         self.digest_active = False
 
         # Generate/Apply Key Stream
-        self.generate_digest(len(ciphertext)+ self.OFFSET)
-        plaintext = bytes([p_text^key_stream for p_text, key_stream in zip(ciphertext, self.digest[self.OFFSET:])])
+        self.generate_digest(len(ciphertext) + self.OFFSET)
+        plaintext = bytes([p_text ^ key_stream for p_text, key_stream in zip(ciphertext, self.digest[self.OFFSET:])])
 
         # Update History
         if len(metadata) > 0 or len(ciphertext) == 0:
             self.append_to_history(metadata, 0)
-        
+
         if len(ciphertext) > 0:
             self.append_to_history(ciphertext, 1)
 
         self.history_collector = np.copy(self.collector)
         self.history_key = np.copy(self.roll_key)
-        
+
         # Generate Tag
         self.generate_digest(self.TAG_SIZE)
 
         # Store Generated Tag and Validate
         self.tag = self.digest.copy()
         valid_tag = self.compare_bytes(self.tag, validation_tag)
-        
+
         return plaintext, valid_tag
 
     def append_to_history(self, message, pad_bit):
@@ -453,9 +452,10 @@ class KravatteSAE(Kravatte):
 
         self.roll_key = self._kravatte_roll_compress(self.roll_key)
 
-        # Pad Message with a single bit and then 
+        # Pad Message with a single bit and then
         start_len = len(message)
-        pad_len = start_len + (self.KECCACK_BYTES - (start_len % self.KECCACK_BYTES))
+        padded_len = start_len + (self.KECCACK_BYTES - (start_len % self.KECCACK_BYTES))
+        pad_len = padded_len - (start_len % padded_len)
         start_pad = b'\x03' if pad_bit == 1 else b'\x02'
         padded_bytes = message + start_pad + (b'\x00' * (pad_len - 1))
         absorb_steps = len(padded_bytes) // self.KECCACK_BYTES
@@ -466,7 +466,6 @@ class KravatteSAE(Kravatte):
             m_k = m ^ self.roll_key
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.collector = self.collector ^ self._keecak(m_k)
-
 
 
 if __name__ == "__main__":
