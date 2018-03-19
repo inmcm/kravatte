@@ -2,20 +2,20 @@
 
 A clean implementation, in Python, of the [Kravatte] pseudo-random function and associated modes based on the [Farafalle PRF] system. At its core, Kravatte accepts a user defined secret key and a sequence of input bytes to generate pseudo-random output of arbitrary size.
 
-Kravatte makes use of the [Keccak] permuation, most notably used in NIST's [FIPS 202 SHA-3 algorithm]. Because the underlying structure of Keccak function works on a three-dimensional state of 1600 bits, it maps well to a 2x2 matrix of 64-bit unsigned integers. As such, the [NumPy] computational library is a natual fit to quickly manipulate such a structure and thus is a hard requirement.
+Kravatte makes use of the [Keccak] permutation, most notably used in NIST's [FIPS 202 SHA-3 algorithm]. Because the underlying structure of Keccak function works on a three-dimensional state of 1600 bits, it maps well to a 5x5 matrix of 64-bit unsigned integers. As such, the [NumPy] computational library is a natural fit to quickly manipulate such a structure and thus is a hard requirement.
 
 This implementation reflects the updated, more secure Kravatte **Achouffe** released in late 2017. The older "Kravatte 6644" logic is available within this repo as well. 
 
 ## Kravatte Object
 
-The basic Kravatte object operates on two Keecak-1600 state matrixes; the collector state and the key state. Instaniating the a Kravatte object initializes the key state with provided user key and sets the collector state to zeros.
+The basic Kravatte object operates on two Keecak-1600 state matrixes; the collector state and the key state. Instantiating a Kravatte object initializes the key state with provided user key and sets the collector state to zeros.
 
 ``` python
 In [1]: from kravatte import Kravatte
 In [2]: my_krav = Kravatte(b'1234567890')
 ```
 
-The newly intialized Kravatte object is now ready to accept input strings of bytes for absorption into the collector state via the `collect_message` method. Repeated calls to `collect_message` are equivalent to `B ◦ A` sequences as described in the the Farafelle spec:
+The newly initialized Kravatte object is now ready to accept input strings of bytes for absorption into the collector state via the `collect_message` method. Repeated calls to `collect_message` are equivalent to `B ◦ A` sequences as described in the the Farafelle spec:
 
 ```python
 In [3]: input_a = b'The quick brown fox jumps over the lazy dog'
@@ -23,7 +23,7 @@ In [4]: my_krav.collect_message(input_a)
 In [5]: input_b = b'3533392d36302d35313235'
 In [6]: my_krav.collect_message(input_b)
 ```
-Once absorbing message strings is complete, the Kravatte object can produce an arbitrary number of pseudo-random output bytes via the `generate_digest` method. Those bytes are availabe then available in the `digest` attribute:
+Once absorbing message strings is complete, the Kravatte object can produce an arbitrary number of pseudo-random output bytes via the `generate_digest` method. Those bytes are available then available in the `digest` attribute:
 
 ```python
 In [7]: output_bytes = 64
@@ -33,10 +33,10 @@ In [10]: hexlify(my_krav.digest)
 Out[10]: b'8a0fc89899e058dedd368b60111bf4958f4f24216bbac76936471e6f7c3958b881c38c8e829ff07bf137701917b3e49ab392e93f3b2abfc714f90c0ca023124d'
 ```
 
-The absorb/output sequence can be restarted with another call to `collect_message`. This clears the collector state and resets the key state to it's initalized value. Alternativly, the user may change to a new secret key with the `update_key` method to reintialize the key state used at the start of message absorption.
+The absorb/output sequence can be restarted with another call to `collect_message`. This clears the collector state and resets the key state to it's initialized value. Alternatively, the user may change to a new secret key with the `update_key` method to reinitialize the key state used at the start of message absorption.
 
 ## MAC
-The most basic mode of Kravatte is an authenicated pseudo-random function (PRF). Kravvate can absorb an arbitary sized user message and key and output a arbitary collection of pseudo-random bytes that can act as a message authenication code.
+The most basic mode of Kravatte is an authenticated pseudo-random function (PRF). Kravvate can absorb an arbitrary sized user message and key and output an arbitrary collection of pseudo-random bytes that can act as a message authentication code.
 ``` python
 >>> from kravatte import mac
 >>> from binascii import hexlify
@@ -49,7 +49,7 @@ The most basic mode of Kravatte is an authenicated pseudo-random function (PRF).
 
 
 ## Kravatte-SIV
-Kravatte-SIV mode is a method of authenticated encryption with asscociated metadata (AEAD) that allows for encrypting a provided plaintest with a secret shared key and an arbitrary metadata value. Encryption generates an equal length ciphertext and fixed length tag that can be used to validate the plaintext at decryption. Metadata values can be shared for different key/message combinations with understanding that the more a value is used, the greater the chance of a tag collision.
+Kravatte-SIV mode is a method of authenticated encryption with associated metadata (AEAD) that allows for encrypting a provided plaintest with a secret shared key and an arbitrary metadata value. Encryption generates an equal length ciphertext and fixed length tag that can be used to validate the plaintext at decryption. Metadata values can be shared for different key/message combinations with understanding that the more a value is used, the greater the chance of a tag collision.
 ### Encrypt
 ``` python
 >>> from kravatte import siv_wrap, siv_unwrap
@@ -75,9 +75,9 @@ True
 
 
 ## Kravatte-SAE
-Kravatte-SAE mode is a session based method of authenticated encryption with asscociated metadata (AEAD). Given a random nonce and secret key, this mode encrypts a sequence of plaintext messages and/or metadata into equal size ciphertexts and a validation tag. The sequence of plaintext/metadata is tracked as a history that builds a chain of authenication from message to message and requires all generated ciphertexts to be processed to fully decrypt and verfiy.
+Kravatte-SAE mode is a session based method of authenticated encryption with associated metadata (AEAD). Given a random nonce and secret key, this mode encrypts a sequence of plaintext messages and/or metadata into equal size ciphertexts and a validation tag. The sequence of plaintext/metadata is tracked as a history that builds a chain of authentication from message to message and requires all generated ciphertexts to be processed to fully decrypt and verify.
 
-A seperate `KravatteSAE` class is provided that adds the history tracking for each encryption operation done via the `sae_wrap`
+A separate `KravatteSAE` class is provided that adds the history tracking for each encryption operation done via the `sae_wrap`
 
 ### Encrypt
 ```python
@@ -157,14 +157,14 @@ A full test suite is available in `test_kravatte.py`. Tests can be invoked with 
 $ pytest -xvvv test_kravatte.py
 ```
 
-Test vectors were generated using the [KeccakTools] C++ library availabe from the Keccak Team
+Test vectors were generated using the [KeccakTools] C++ library available from the Keccak Team
 
 ## Caveats
- - Being a Python implementation, performance on large files or data sets may be inadequete.
- - The inputs and outputs of this implementation are limited to byte (8-bit) divisable sizes
- - While security was top of mind during development, this implmenatation has not fully audited for timing attacks, side channel attacks or other vuneralbilites.Other bugs not caught by the test cases me present. Use in a production enviroment is not encouraged.
+ - Being a Python implementation, performance on large files or data sets may be inadequate.
+ - The inputs and outputs of this implementation are limited to byte (8-bit) divisible sizes
+ - While security was top of mind during development, this implementation has not fully audited for timing attacks, side channel attacks or other vulnerabilities. Other bugs not caught by the test cases me present. Use in a production environment is not encouraged.
 
-If any of above are of concern, please check out the offical  [KeccakTools] and [Keccak Code Package]
+If any of above are of concern, please check out the official [KeccakTools] and [Keccak Code Package]
 
 [Kravatte]:https://keccak.team/kravatte.html
 [Keccak]:https://keccak.team/files/Keccak-reference-3.0.pdf
