@@ -23,7 +23,7 @@ In [4]: my_krav.collect_message(input_a)
 In [5]: input_b = b'3533392d36302d35313235'
 In [6]: my_krav.collect_message(input_b)
 ```
-Once absorbing message strings is complete, the Kravatte object can produce an arbitrary number of pseudo-random output bytes via the `generate_digest` method. Those bytes are available then available in the `digest` attribute:
+Once absorbing message strings is complete, the Kravatte object can produce an arbitrary number of pseudo-random output bytes via the `generate_digest` method. Those bytes are then available in the `digest` attribute:
 
 ```python
 In [7]: output_bytes = 64
@@ -33,10 +33,10 @@ In [10]: hexlify(my_krav.digest)
 Out[10]: b'8a0fc89899e058dedd368b60111bf4958f4f24216bbac76936471e6f7c3958b881c38c8e829ff07bf137701917b3e49ab392e93f3b2abfc714f90c0ca023124d'
 ```
 
-The absorb/output sequence can be restarted with another call to `collect_message`. This clears the collector state and resets the key state to it's initialized value. Alternatively, the user may change to a new secret key with the `update_key` method to reinitialize the key state used at the start of message absorption.
+The absorb/output sequence can be restarted with another call to `collect_message`. This clears the collector state and resets the key state to its initialized value. Alternatively, the user may change to a new secret key with the `update_key` method to reinitialize the key state used at the start of message absorption.
 
 ## MAC
-The most basic mode of Kravatte is an authenticated pseudo-random function (PRF). Kravvate can absorb an arbitrary sized user message and key and output an arbitrary collection of pseudo-random bytes that can act as a message authentication code.
+The most basic mode of Kravatte is an authenticated pseudo-random function (PRF). Kravvate can absorb an arbitrary sized user message and key, and output an arbitrary collection of pseudo-random bytes that can act as a message authentication code.
 ``` python
 In [1] from kravatte import mac
 In [2] from binascii import hexlify
@@ -76,9 +76,9 @@ Out[12] True
 
 
 ## Kravatte-SAE
-Kravatte-SAE mode is a session based method of authenticated encryption with associated metadata (AEAD). Given a random nonce and secret key, this mode encrypts a sequence of plaintext messages and/or metadata into equal size ciphertexts and a validation tag. The sequence of plaintext/metadata is tracked as a history that builds a chain of authentication from message to message and requires all generated ciphertexts to be processed to fully decrypt and verify.
+Kravatte-SAE mode is a session based method of AEAD. Given a random nonce and secret key, this mode encrypts a sequence of plaintext messages and/or metadata into equal size ciphertexts and a validation tag. The sequence of plaintext/metadata is tracked as a history that builds a chain of authentication from message to message and requires all generated ciphertexts to be processed to fully decrypt and verify.
 
-A separate `KravatteSAE` class is provided that adds the history tracking for each encryption operation done via the `sae_wrap`
+A separate `KravatteSAE` class is provided that adds the history tracking for each encryption operation done via the `sae_wrap` method.
 
 ### Encrypt
 ```python
@@ -163,7 +163,7 @@ Test vectors were generated using the [KeccakTools] C++ library available from t
 ## Caveats
  - Being a Python implementation, performance on large files or data sets may be inadequate.
  - The inputs and outputs of this implementation are limited to byte (8-bit) divisible sizes
- - While security was top of mind during development, this implementation has not fully audited for timing attacks, side channel attacks or other vulnerabilities. Other bugs not caught by the test cases me present. Use in a production environment is not encouraged.
+ - While security was top of mind during development, this implementation has not been fully audited for timing attacks, side channel attacks or other vulnerabilities. Other bugs not caught by the test cases may be present. Use in a production environment is not encouraged.
 
 If any of above are of concern, please check out the official [KeccakTools] and [Keccak Code Package]
 
