@@ -67,7 +67,7 @@ class Kravatte(object):
         Inputs:
             key (bytes): user provided bytes to be padded (if nesscessary) and computed into Kravatte base key 
         """
-        key_pad = self._pad_10(key, self.KECCACK_BYTES)
+        key_pad = self._pad_10_append(key, self.KECCACK_BYTES)
         key_array = np.frombuffer(key_pad, dtype=np.uint64, count=self.KECCAK_LANES, offset=0).reshape([self.KECCAK_PLANES_SLICES, self.KECCAK_PLANES_SLICES], order='F')
         self.kra_key = self._keecak(key_array)
 
@@ -106,7 +106,7 @@ class Kravatte(object):
 
         # Pad Message
         msg_len = len(message)
-        kra_msg = self._pad_10(message, msg_len + (self.KECCACK_BYTES - (msg_len % self.KECCACK_BYTES)))
+        kra_msg = self._pad_10_append(message, msg_len + (self.KECCACK_BYTES - (msg_len % self.KECCACK_BYTES)))
         absorb_steps = len(kra_msg) // self.KECCACK_BYTES
 
         # Absorb into Collector
@@ -235,21 +235,29 @@ class Kravatte(object):
         return state
 
     @staticmethod
-    def _pad_10(input_bytes, desired_length):
+    def _pad_10_append(input_bytes, desired_length, append_bit=None):
         """
         Farfalle defined padding function. Limited to byte divisible inputs only
 
         Inputs:
             input_bytes (bytes): Collection of bytes
             desired_length (int): Number of bytes to pad input len out to
+            append_bit (int): a single bit represented by 1 or 0 to be inserted before the padding
+                              starts. Allows "appending" a bit as required by several Kravatte modes
         Return:
             bytes: input bytes with padding applied
         """
         start_len = len(input_bytes)
         if start_len == desired_length:
             return input_bytes
+
+        if append_bit is not None:
+            head_pad_byte = b'\x03' if append_bit == 1 else b'\x02'
+        else:
+            head_pad_byte = b'\x01'
+
         pad_len = desired_length - (start_len % desired_length)
-        padded_bytes = input_bytes + b'\x01' + (b'\x00' * (pad_len - 1))
+        padded_bytes = input_bytes + head_pad_byte + (b'\x00' * (pad_len - 1))
         return padded_bytes
 
     @staticmethod
@@ -455,9 +463,7 @@ class KravatteSAE(Kravatte):
         # Pad Message with a single bit and then
         start_len = len(message)
         padded_len = start_len + (self.KECCACK_BYTES - (start_len % self.KECCACK_BYTES))
-        pad_len = padded_len - (start_len % padded_len)
-        start_pad = b'\x03' if pad_bit == 1 else b'\x02'
-        padded_bytes = message + start_pad + (b'\x00' * (pad_len - 1))
+        padded_bytes = self._pad_10_append(message, padded_len, pad_bit)
         absorb_steps = len(padded_bytes) // self.KECCACK_BYTES
 
         # Absorb into Collector
