@@ -2,11 +2,12 @@
 Kravatte Achouffe Cipher Suite: Encryption, Decryption, and Authenication Tools based on the Farfalle modes
 Copyright 2018 Michael Calvin McCoy
 """
+from math import floor, ceil, log2
 import numpy as np
 
 
 class Kravatte(object):
-    """Implementation of the Farfalle Psuedo-Random Function (PRF) construct utilizing the 
+    """Implementation of the Farfalle Psuedo-Random Function (PRF) construct utilizing the
     Keccak-1600 permutation.
     """
     KECCACK_BYTES = 200
@@ -89,7 +90,7 @@ class Kravatte(object):
         self.digest_active = False
         self.new_collector = True
 
-    def collect_message(self, message):
+    def collect_message(self, message, append_bit=None):
         """
         Pad and Process Blocks of Message into collector state
 
@@ -106,7 +107,7 @@ class Kravatte(object):
 
         # Pad Message
         msg_len = len(message)
-        kra_msg = self._pad_10_append(message, msg_len + (self.KECCACK_BYTES - (msg_len % self.KECCACK_BYTES)))
+        kra_msg = self._pad_10_append(message, msg_len + (self.KECCACK_BYTES - (msg_len % self.KECCACK_BYTES)), append_bit)
         absorb_steps = len(kra_msg) // self.KECCACK_BYTES
 
         # Absorb into Collector
@@ -116,15 +117,16 @@ class Kravatte(object):
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.collector = self.collector ^ self._keecak(m_k)
 
-    def generate_digest(self, output_size):
+    def generate_digest(self, output_size, short_kravatte=False):
         """
         Squeeze an arbitrary number of bytes from collector state
 
         Inputs:
             output_size (int): Number of bytes to generate and store in Kravatte digest parameter
+            short_kravatte (bool): Enable disable short kravatte
         """
         if not self.digest_active:
-            self.collector = self._keecak(self.collector)
+            self.collector = self.collector if short_kravatte else self._keecak(self.collector)
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.digest_active = True
 
@@ -473,6 +475,86 @@ class KravatteSAE(Kravatte):
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.collector = self.collector ^ self._keecak(m_k)
 
+
+class KravatteWBC(Kravatte):
+    SPLIT_THRESHOLD = 398
+
+    def __init__(self, cipher_size, tweak=b'', key=b''):
+        super(KravatteWBC, self).__init__(key)
+        self.split_bytes(cipher_size)
+        self.tweak = tweak
+
+    def split_bytes(self, message_size_bytes):
+        if message_size_bytes <= self.SPLIT_THRESHOLD:
+            nL = ceil(message_size_bytes / 2)
+        else:
+            q = floor(((message_size_bytes + 1) / self.KECCACK_BYTES)) + 1
+            x = floor(log2(q - 1))
+            nL = ((q - (2**x)) * self.KECCACK_BYTES) - 1
+        self.size_L = nL
+        self.size_R = message_size_bytes - nL
+
+    def encrypt(self, message):
+        L = message[0:self.size_L]
+        R = message[self.size_L:]
+
+        # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bits of R
+        self.collect_message(L, append_bit=0)
+        self.generate_digest(min(self.KECCACK_BYTES, self.size_R), short_kravatte=True)
+        extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
+        R = bytes([p_text ^ key_stream for p_text, key_stream in zip(R, extended_digest)])
+
+        # L ← L + GK (R||1 ◦ W)
+        self.collect_message(self.tweak)
+        self.collect_message(R, append_bit=1)
+        self.generate_digest(self.size_L)
+        L = bytes([p_text ^ key_stream for p_text, key_stream in zip(L, self.digest)])
+
+        # R ← R + GK (L||0 ◦ W)
+        self.collect_message(self.tweak)
+        self.collect_message(L, append_bit=0)
+        self.generate_digest(self.size_R)
+        R = bytes([p_text ^ key_stream for p_text, key_stream in zip(R, self.digest)])
+
+        # L0 ← L0 + HK(R||1), with L0 the first min(b, |L|) bits of L
+        self.collect_message(R, append_bit=1)
+        self.generate_digest(min(self.KECCACK_BYTES, self.size_L), short_kravatte=True)
+        extended_digest = self.digest + ((self.size_L - len(self.digest)) * b'\x00')
+        L = bytes([p_text ^ key_stream for p_text, key_stream in zip(L, extended_digest)])
+
+        # C ← the concatenation of L and R
+        return L + R
+
+    def decrypt(self, message):
+        L = ciphertext[0:self.size_L]
+        R = ciphertext[self.size_L:]
+
+        # L0 ← L0 + HK(R||1), with L0 the first min(b, |L|) bits of L
+        self.collect_message(R, append_bit=1)
+        self.generate_digest(min(self.KECCACK_BYTES, self.size_L), short_kravatte=True)
+        extended_digest = self.digest + ((self.size_L - len(self.digest)) * b'\x00')
+        L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, extended_digest)])
+
+        # R ← R + GK (L||0 ◦ W)
+        self.collect_message(self.tweak)
+        self.collect_message(L, append_bit=0)
+        self.generate_digest(self.size_R)
+        R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, self.digest)])
+
+        # L ← L + GK (R||1 ◦ W)
+        self.collect_message(self.tweak)
+        self.collect_message(R, append_bit=1)
+        self.generate_digest(self.size_L)
+        L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, self.digest)])
+
+        # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bits of R
+        self.collect_message(L, append_bit=0)
+        self.generate_digest(min(self.KECCACK_BYTES, self.size_R), short_kravatte=True)
+        extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
+        R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, extended_digest)])
+
+        # P ← the concatenation of L and R
+        return L + R
 
 if __name__ == "__main__":
     from time import perf_counter
