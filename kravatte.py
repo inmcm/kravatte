@@ -168,7 +168,7 @@ class Kravatte(object):
             for state_lane, t_mod in np.nditer([state, self.RHO_SHIFTS], flags=['external_loop'], op_flags=[['readwrite'], ['readonly']]):
                 state_lane[...] = state_lane << t_mod | state_lane >> 64 - t_mod
 
-            #pi_step:
+            # pi_step:
             # Shuffle lanes to pre-calculated positions
             state = state[self.PI_ROW_REORDER, self.PI_COLUMN_REORDER]
 
@@ -178,7 +178,7 @@ class Kravatte(object):
             for w, x, y in self.CHI_REORDER:
                 state[w] ^= ~tmp_array[x] & tmp_array[y]
 
-            #iota_step:
+            # iota_step:
             # Exlusive-or first lane of state with round constant
             state[0, 0] ^= self.IOTA_CONSTANTS[round_num]
         return state
@@ -525,7 +525,7 @@ class KravatteWBC(Kravatte):
         # C ← the concatenation of L and R
         return L + R
 
-    def decrypt(self, message):
+    def decrypt(self, ciphertext):
         L = ciphertext[0:self.size_L]
         R = ciphertext[self.size_L:]
 
