@@ -479,9 +479,9 @@ class KravatteSAE(Kravatte):
 class KravatteWBC(Kravatte):
     SPLIT_THRESHOLD = 398
 
-    def __init__(self, cipher_size, tweak=b'', key=b''):
+    def __init__(self, block_cipher_size, tweak=b'', key=b''):
         super(KravatteWBC, self).__init__(key)
-        self.split_bytes(cipher_size)
+        self.split_bytes(block_cipher_size)
         self.tweak = tweak
 
     def split_bytes(self, message_size_bytes):
@@ -555,6 +555,72 @@ class KravatteWBC(Kravatte):
 
         # P ← the concatenation of L and R
         return L + R
+
+
+class KravatteWBC_AE(KravatteWBC):
+    WBC_AE_TAG_LEN = 16
+
+    def __init__(self, block_cipher_size, key=b''):
+        super(KravatteWBC_AE, self).__init__(block_cipher_size + self.WBC_AE_TAG_LEN, None, key=key)
+
+    def wrap(self, message, metadata):
+        self.tweak = metadata  # metadata treated as tweak
+        padded_message = message + (self.WBC_AE_TAG_LEN * b'\x00')
+        return self.encrypt(padded_message)
+
+    def unwrap(self, ciphertext, metadata):
+
+        L = ciphertext[0:self.size_L]
+        R = ciphertext[self.size_L:]
+        self.tweak = metadata
+
+        # L0 ← L0 + HK(R||1), with L0 the first min(b, |L|) bits of L
+        self.collect_message(R, append_bit=1)
+        self.generate_digest(min(self.KECCACK_BYTES, self.size_L), short_kravatte=True)
+        extended_digest = self.digest + ((self.size_L - len(self.digest)) * b'\x00')
+        L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, extended_digest)])
+
+        # R ← R + GK (L||0 ◦ A)
+        self.collect_message(self.tweak)
+        self.collect_message(L, append_bit=0)
+        self.generate_digest(self.size_R)
+        R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, self.digest)])
+
+        # |R| ≥ b+t
+        if self.size_R >= self.KECCACK_BYTES + self.WBC_AE_TAG_LEN:
+            # if the last t bytes of R ̸= 0t then return error!
+            valid_plaintext = valid_plaintext = True if R[-self.WBC_AE_TAG_LEN:] == (self.WBC_AE_TAG_LEN * b'\x00') else False
+
+            # L ← L + GK (R||1 ◦ A)
+            self.collect_message(self.tweak)
+            self.collect_message(R, append_bit=1)
+            self.generate_digest(self.size_L)
+            L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, self.digest)])
+
+            # R0 ← R0 + HK(L||0), with R0 the first b bytes of R
+            self.collect_message(L, append_bit=0)
+            self.generate_digest(self.KECCACK_BYTES, short_kravatte=True)
+            extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
+            R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, extended_digest)])
+
+        else:
+            # L ← L + GK (R||1 ◦ A)
+            self.collect_message(self.tweak)
+            self.collect_message(R, append_bit=1)
+            self.generate_digest(self.size_L)
+            L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, self.digest)])
+
+            # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bytes of R 
+            self.collect_message(L, append_bit=0)
+            self.generate_digest(min(self.KECCACK_BYTES, self.size_R), short_kravatte=True)
+            extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
+            R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, extended_digest)])
+
+            # if the last t bytes of L||R ̸= 0t then return error!
+            valid_plaintext = True if (L + R)[-self.WBC_AE_TAG_LEN:] == (self.WBC_AE_TAG_LEN * b'\x00') else False
+
+        # P′ ← L||R
+        return (L + R)[:-self.WBC_AE_TAG_LEN], valid_plaintext
 
 if __name__ == "__main__":
     from time import perf_counter
