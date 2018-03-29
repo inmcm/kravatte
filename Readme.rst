@@ -22,6 +22,21 @@ This implementation reflects the updated, more secure Kravatte
 **Achouffe** released in late 2017. The older “Kravatte 6644” logic is
 available within this repo as well.
 
+Installation
+---------------
+Kravatte can be easily installed from `pypi <https://pypi.org/project/kravatte/>`__ via `pip`:
+
+.. code:: bash
+
+    $ pip install kravatte
+
+If `pip` is unavailable, this repo can be clone and setup can be done manually:
+
+.. code:: bash
+
+    $ python setup.py install
+
+
 Kravatte Object
 ---------------
 
