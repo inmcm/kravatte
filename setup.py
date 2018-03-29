@@ -33,7 +33,6 @@ setup(
     install_requires=requirements,
     license="MIT license",
     long_description=readme,
-    long_description_content_type='text/markdown',
     include_package_data=True,
     keywords='kravatte, farfalle, PRF, AEAD, MAC, crypto, encryption',
     name='kravatte',
