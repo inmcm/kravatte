@@ -5,7 +5,7 @@
 
 from setuptools import setup, find_packages
 
-with open('Readme.md') as readme_file:
+with open('Readme.rst') as readme_file:
     readme = readme_file.read()
 
 requirements = ['numpy>=1.12.0']
