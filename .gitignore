@@ -2,3 +2,7 @@
 .cache/
 .idea/
 __pycache__/
+.eggs/
+build/
+dist/
+kravatte.egg-info/
