@@ -111,7 +111,10 @@ Encryption generates an equal length ciphertext and fixed length tag
 that can be used to validate the plaintext at decryption. Metadata
 values can be shared for different key/message combinations with
 understanding that the more a value is used, the greater the chance of a
-tag collision. ### Encrypt
+tag collision. 
+
+Encrypt
+~~~~~~~
 
 .. code:: python
 
@@ -227,8 +230,9 @@ KravatteWBC
 -----------
 
 Kravatte Wide Block Cipher mode is symmetric block cipher mode where the user can specify
-the size of the block, an arbitrary `tweak` value input, and arbitary secret key. The KravatteWBC, once 
-initialized can encrypt/decrypt messages of given block size (or smaller)
+the size of the block, an arbitrary `tweak` value input, and arbitary secret key. The `KravatteWBC`
+obejct, once initialized can encrypt/decrypt messages of the given block size (or smaller). KravatteWBC
+is splits messages into left and right components and uses a 4-stage Feistal sequence to encrypt/decrypt.
 
 Encrypt and Decrypt
 ~~~~~~~~~~~~~~~~~~~
@@ -252,7 +256,7 @@ KravatteWBC-AE
 --------------
 
 KravatteWBC-AE is a variant of KravatteWBC that extends the desired block size by 16 bytes and 
-embeds authenication data. The tweak is replaced with some arbitrary asscociated metadata. When the 
+embeds authenication data. The tweak is replaced with arbitrary asscociated metadata. When the 
 block is decrypted it is also validated as being encrypted with same secret key.
 
 Encrypt and Decrypt
