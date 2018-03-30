@@ -66,7 +66,7 @@ class Kravatte(object):
         Pad and compute new Kravatte base key from bytes source.
 
         Inputs:
-            key (bytes): user provided bytes to be padded (if nesscessary) and computed into Kravatte base key 
+            key (bytes): user provided bytes to be padded (if nesscessary) and computed into Kravatte base key
         """
         key_pad = self._pad_10_append(key, self.KECCACK_BYTES)
         key_array = np.frombuffer(key_pad, dtype=np.uint64, count=self.KECCAK_LANES, offset=0).reshape([self.KECCAK_PLANES_SLICES, self.KECCAK_PLANES_SLICES], order='F')
@@ -92,10 +92,11 @@ class Kravatte(object):
 
     def collect_message(self, message, append_bit=None):
         """
-        Pad and Process Blocks of Message into collector state
+        Pad and Process Blocks of Message into Kravatte collector state
 
         Inputs:
-            message (bytes)
+            message (bytes): arbitary number of bytes to be padded into Keccak blocks and absorbed into the collector
+            append_bit (int): Either 1 or 0 to append to the message before padding. Required for more advanced Kravatte modes.
         """
         if self.digest_active:
             self.reset_state()
@@ -123,7 +124,7 @@ class Kravatte(object):
 
         Inputs:
             output_size (int): Number of bytes to generate and store in Kravatte digest parameter
-            short_kravatte (bool): Enable disable short kravatte
+            short_kravatte (bool): Enable disable short kravatte required for other Kravatte modes
         """
         if not self.digest_active:
             self.collector = self.collector if short_kravatte else self._keecak(self.collector)
@@ -298,6 +299,7 @@ def mac(key, message, output_size):
     kravatte_mac_gen.generate_digest(output_size)
     return kravatte_mac_gen.digest
 
+
 def siv_wrap(key, message, metadata, tag_size=32):
     """
     Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and
@@ -331,10 +333,11 @@ def siv_wrap(key, message, metadata, tag_size=32):
     ciphertext = bytes([p_text ^ key_stream for p_text, key_stream in zip(message, kravatte_siv_wrap.digest)])
     return ciphertext, siv_tag
 
+
 def siv_unwrap(key, ciphertext, siv_tag, metadata):
     """
-    Decryption of Synthetic Intialization Vector method described in the Farfalle/Kravatte 
-    spec. Given a key, metadata, and validation tag, generates plaintext (of equivalent length to 
+    Decryption of Synthetic Intialization Vector method described in the Farfalle/Kravatte
+    spec. Given a key, metadata, and validation tag, generates plaintext (of equivalent length to
     the ciphertext) and validates message based on included tag, metadata, and key. Inverse of
     siv_wrap function.
 
@@ -351,7 +354,7 @@ def siv_unwrap(key, ciphertext, siv_tag, metadata):
     # Initialize Kravatte
     kravatte_siv_unwrap = Kravatte(key)
 
-    # Re-Generate Key Stream 
+    # Re-Generate Key Stream
     kravatte_siv_unwrap.collect_message(metadata)
     kravatte_siv_unwrap.collect_message(siv_tag)
     kravatte_siv_unwrap.generate_digest(len(ciphertext))
@@ -373,6 +376,13 @@ class KravatteSAE(Kravatte):
     OFFSET = TAG_SIZE
 
     def __init__(self, nonce, key=b''):
+        """
+        Initialize KravatteSAE with user key and nonce
+
+        Inputs:
+            nonce (bytes) - random unique value to initalize the session with
+            key (bytes) - secret key for encrypting session messages
+        """
         super(KravatteSAE, self).__init__(key)
         self.initialize_history(nonce)
 
@@ -381,7 +391,7 @@ class KravatteSAE(Kravatte):
         Pad and compute new Kravatte base key from bytes source.
 
         Inputs:
-            key (bytes): user provided bytes to be padded (if nesscessary) and computed into Kravatte base key 
+            key (bytes): user provided bytes to be padded (if nesscessary) and computed into Kravatte base key
         """
         self.collect_message(nonce)
         self.history_collector = np.copy(self.collector)
@@ -389,8 +399,18 @@ class KravatteSAE(Kravatte):
         self.generate_digest(self.TAG_SIZE)
         self.tag = self.digest.copy()
 
-    def sae_wrap(self, plaintext, metadata):    
+    def sae_wrap(self, plaintext, metadata):
+        """
+        Encrypt an arbitrary plaintext message using the included metdata as part of an on-going
+        session. Creates authenication tag for validation during decryption.
 
+        Inputs:
+            plaintext (bytes): user plaintext of arbitrary length
+            metadata (bytes): associated data to ensure a unique encryption permutation
+
+        Returns:
+            (bytes, bytes): encrypted cipher text and authenication tag
+        """
         # Restore Kravatte State to When Latest History was Absorbed
         self.collector = np.copy(self.history_collector)
         self.roll_key = np.copy(self.history_key)
@@ -417,7 +437,19 @@ class KravatteSAE(Kravatte):
         return ciphertext, self.digest
 
     def sae_unwrap(self, ciphertext, metadata, validation_tag):
+        """
+        Decrypt an arbitrary ciphertext message using the included metdata as part of an on-going
+        session. Creates authenication tag for validation during decryption.
 
+        Inputs:
+            ciphertext (bytes): user ciphertext of arbitrary length
+            metadata (bytes): associated data from encryption
+            validation_tag (bytes): collection of bytes that autheicates the decrypted plaintext as
+                                    being encrypted with the same secret key
+
+        Returns:
+            (bytes, bool): decrypted plaintext and boolean indicating in decryption was authenicated against secret key
+        """
         # Restore Kravatte State to When Latest History was Absorbed
         self.collector = np.copy(self.history_collector)
         self.roll_key = np.copy(self.history_key)
@@ -449,10 +481,11 @@ class KravatteSAE(Kravatte):
 
     def append_to_history(self, message, pad_bit):
         """
-        Pad and Process Blocks of Message into collector state
+        Update history collector state with provided message.
 
         Inputs:
-            message (bytes)
+            message (bytes): arbitary number of bytes to be padded into Keccak blocks and absorbed into the collector
+            pad_bit (int): Either 1 or 0 to append to the end of the regular message before padding
         """
         if self.digest_active:
             self.collector = np.copy(self.history_collector)
@@ -480,11 +513,26 @@ class KravatteWBC(Kravatte):
     SPLIT_THRESHOLD = 398
 
     def __init__(self, block_cipher_size, tweak=b'', key=b''):
+        """
+        Initialize KravatteWBC object
+
+        Inputs:
+            block_cipher_size (int) - size of block cipher in bytes
+            tweak (bytes) - arbitary value to customize cipher output
+            key (bytes) - secret key for encryptin message blocks
+        """
         super(KravatteWBC, self).__init__(key)
         self.split_bytes(block_cipher_size)
         self.tweak = tweak
 
     def split_bytes(self, message_size_bytes):
+        """
+        Calculates the size (in bytes) of the "left" and "right" components of the block encryption
+        decryption process. Based on algorithm given in Farfalle spec.
+
+        Input
+            message_size_bytes (int): user defined block size for this instance of KravatteWBC
+        """
         if message_size_bytes <= self.SPLIT_THRESHOLD:
             nL = ceil(message_size_bytes / 2)
         else:
@@ -495,6 +543,14 @@ class KravatteWBC(Kravatte):
         self.size_R = message_size_bytes - nL
 
     def encrypt(self, message):
+        """
+        Encrypt a user message using KravatteWBC mode
+        Inputs:
+            message (bytes): plaintext message to encrypt. Length should be <= the block cipher size
+                             defined in the KravatteWBC object
+        Returns:
+            bytes: encrypted block same length as message
+        """
         L = message[0:self.size_L]
         R = message[self.size_L:]
 
@@ -526,6 +582,13 @@ class KravatteWBC(Kravatte):
         return L + R
 
     def decrypt(self, ciphertext):
+        """
+        Decrypt a user message using KravatteWBC mode
+        Inputs:
+            message (bytes): cipehertext message to decrypt.
+        Returns:
+            bytes: decrypted block same length as ciphertext
+        """
         L = ciphertext[0:self.size_L]
         R = ciphertext[self.size_L:]
 
@@ -561,15 +624,44 @@ class KravatteWBC_AE(KravatteWBC):
     WBC_AE_TAG_LEN = 16
 
     def __init__(self, block_cipher_size, key=b''):
+        """
+        Initialize KravatteWBC_AE object
+
+        Inputs:
+            block_cipher_size (int) - size of block cipher in bytes
+            key (bytes) - secret key for encryptin message blocks
+        """
         super(KravatteWBC_AE, self).__init__(block_cipher_size + self.WBC_AE_TAG_LEN, None, key=key)
 
     def wrap(self, message, metadata):
+        """
+        Encrypt a user message and generate included authenicated data. Requires metedata input
+        in lieu of customization tweak.
+
+        Inputs:
+            message (bytes): User message same length as configured object block size
+            metadata (bytes): associated metadata to ensure unqiue output
+
+        Returns:
+            bytes: authenicated encrypted block
+        """
+
         self.tweak = metadata  # metadata treated as tweak
         padded_message = message + (self.WBC_AE_TAG_LEN * b'\x00')
         return self.encrypt(padded_message)
 
     def unwrap(self, ciphertext, metadata):
+        """
+        Decrypt a ciphertext block and validate included authenicated data. Requires metedata input
+        in lieu of customization tweak.
 
+        Inputs:
+            message (bytes): ciphertext same length as configured object block size
+            metadata (bytes): associated metadata to ensure unqiue output
+
+        Returns:
+            (bytes, bool): plaintext byes and decryption valid flag
+        """
         L = ciphertext[0:self.size_L]
         R = ciphertext[self.size_L:]
         self.tweak = metadata
@@ -625,9 +717,9 @@ class KravatteWBC_AE(KravatteWBC):
 if __name__ == "__main__":
     from time import perf_counter
     my_key = b'\xFF' * 32
-    my_message = bytes([x % 256 for x in range(4*1024*1024)])
+    my_message = bytes([x % 256 for x in range(4 * 1024 * 1024)])
     start = perf_counter()
-    my_kra = mac(my_key, my_message, 4*1024*1024)
+    my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
     stop = perf_counter()
-    print("Process Time:", stop-start)
+    print("Process Time:", stop - start)
     print(len(my_kra))
