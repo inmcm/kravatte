@@ -196,8 +196,6 @@ ciphertext, original metadata, and validation tag to not only decrypt
 the plaintext, but return a boolean if the decrypted plaintext is valid
 within the chain of messages.
 
-.. _decrypt-1:
-
 Decrypt
 ~~~~~~~
 
@@ -225,17 +223,68 @@ Decrypt
     In [39]: check_tag_4
     Out[39]: True
 
-Kravatte-WBC
-------------
+KravatteWBC
+-----------
 
-TODO
-~~~~
+Kravatte Wide Block Cipher mode is symmetric block cipher mode where the user can specify
+the size of the block, an arbitrary `tweak` value input, and arbitary secret key. The KravatteWBC, once 
+initialized can encrypt/decrypt messages of given block size (or smaller)
+
+Encrypt and Decrypt
+~~~~~~~~~~~~~~~~~~~
+
+.. code:: python
+
+    In [1]: from kravatte import KravatteWBC
+    In [2]: block_size = 64
+    In [3]: my_tweak = b'tweak can be anything'
+    In [4]: my_key = b'\x00' * 24
+    In [5]: my_wbc = KravatteWBC(block_size, my_tweak, my_key)
+    In [6]: c_block = my_wbc.encrypt(b'This is some random 64-byte text string to use in this example!!')
+    In [7]: from binascii import hexlify
+    In [8]: hexlify(c_block)
+    Out[8]: b'2368fae1271e5c784537df331586d5d4daeeb34a6fe4ebea03cc1df7f9c0d79fcc709a9ff2199514f431da685e27658dbf6c5afed11ce5c8172f7615c19db1b9'
+    In [9]: my_wbc.decrypt(c_block)
+    Out[9]: b'This is some random 64-byte text string to use in this example!!'
+
+
+KravatteWBC-AE
+--------------
+
+KravatteWBC-AE is a variant of KravatteWBC that extends the desired block size by 16 bytes and 
+embeds authenication data. The tweak is replaced with some arbitrary asscociated metadata. When the 
+block is decrypted it is also validated as being encrypted with same secret key.
+
+Encrypt and Decrypt
+~~~~~~~~~~~~~~~~~~~
+
+.. code:: python
+
+    In [1]: from datetime import datetime
+    In [2]: from binascii import hexlify
+    In [3]: my_key = b"Doesn't look like anything to me"
+    In [4]: metadata = str(datetime.now()).encode()
+    In [5]: message = b'These violent delights have violent ends'
+    In [6]: len(message)
+    Out[6]: 40
+    In [7]: my_WBC_AE = KravatteWBC_AE(40, my_key)
+    In [8]: ctext_ae = my_WBC_AE.wrap(message, metadata)
+    In [9]: len(ctext_ae)
+    Out[9]: 56
+    In [10]: hexlify(ctext_ae)
+    Out[10]: b'388623f7a7d3c044cda574063b4ff16edbdfc95cb449f335a1c5ad5ed37897aa2470f3575825a55df04cc1dab34b4feb03aa6d35f6190d62'
+    In [11]: plaintext, validated = my_WBC_AE.unwrap(ctext_ae, metadata)
+    In [12]: plaintext
+    Out[12]: b'These violent delights have violent ends'
+    In [13]: validated
+    Out[13]: True
+
 
 Testing
 -------
 
-A full test suite is available in ``test_kravatte.py``. Tests can be
-invoked with pytest:
+A full test suite is available in ``test_kravatte.py``. Assuming the ``kravatte`` module is installed, 
+tests can be invoked with pytest:
 
 .. code:: bash
 
