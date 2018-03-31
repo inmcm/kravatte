@@ -1,7 +1,7 @@
 Kravatte Achouffe Cipher Suite in Python/NumPy
 ==============================================
 
-A implementation, in Python3, of the
+An implementation, in Python3, of the
 `Kravatte <https://keccak.team/kravatte.html>`__ pseudo-random function
 and associated modes based on the `Farafalle
 PRF <https://eprint.iacr.org/2016/1188.pdf>`__ system. At its core,
