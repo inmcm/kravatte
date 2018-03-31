@@ -30,7 +30,7 @@ Kravatte can be easily installed from `pypi <https://pypi.org/project/kravatte/>
 
     $ pip install kravatte
 
-If `pip` is unavailable, this repo can be clone and setup can be done manually:
+If `pip` is unavailable, this repo can be cloned and setup can be done manually:
 
 .. code:: bash
 
@@ -231,7 +231,7 @@ KravatteWBC
 
 Kravatte Wide Block Cipher mode is symmetric block cipher mode where the user can specify
 the size of the block, an arbitrary `tweak` value input, and arbitary secret key. The `KravatteWBC`
-obejct, once initialized can encrypt/decrypt messages of the given block size (or smaller). KravatteWBC
+object, once initialized can encrypt/decrypt messages of the given block size (or smaller). KravatteWBC
 is splits messages into left and right components and uses a 4-stage Feistal sequence to encrypt/decrypt.
 
 Encrypt and Decrypt
@@ -256,7 +256,7 @@ KravatteWBC-AE
 --------------
 
 KravatteWBC-AE is a variant of KravatteWBC that extends the desired block size by 16 bytes and 
-embeds authenication data. The tweak is replaced with arbitrary asscociated metadata. When the 
+embeds authentication data. The tweak is replaced with arbitrary associated metadata. When the 
 block is decrypted it is also validated as being encrypted with same secret key.
 
 Encrypt and Decrypt
