@@ -3,7 +3,7 @@ Kravatte Achouffe Cipher Suite in Python/NumPy
 
 An implementation, in Python3, of the
 `Kravatte <https://keccak.team/kravatte.html>`__ pseudo-random function
-and associated modes based on the `Farafalle
+and associated modes based on the `Farfalle
 PRF <https://eprint.iacr.org/2016/1188.pdf>`__ system. At its core,
 Kravatte accepts a user defined secret key and a sequence of input bytes
 to generate pseudo-random output of arbitrary size.
@@ -23,7 +23,7 @@ This implementation reflects the updated, more secure Kravatte
 available within this repo as well.
 
 Installation
----------------
+------------
 Kravatte can be easily installed from `pypi <https://pypi.org/project/kravatte/>`__ via `pip`:
 
 .. code:: bash
@@ -40,7 +40,7 @@ If `pip` is unavailable, this repo can be cloned and setup can be done manually:
 Kravatte Object
 ---------------
 
-The basic Kravatte object operates on two Keecak-1600 state matrixes;
+The basic Kravatte object operates on two Keecak-1600 state matrices;
 the collector state and the key state. Instantiating a Kravatte object
 initializes the key state with provided user key and sets the collector
 state to zeros.
@@ -53,7 +53,7 @@ state to zeros.
 The newly initialized Kravatte object is now ready to accept input
 strings of bytes for absorption into the collector state via the
 ``collect_message`` method. Repeated calls to ``collect_message`` are
-equivalent to ``B ◦ A`` sequences as described in the the Farafelle
+equivalent to ``B ◦ A`` sequences as described in the the Farfalle
 spec:
 
 .. code:: python
@@ -86,7 +86,7 @@ MAC
 ---
 
 The most basic mode of Kravatte is an authenticated pseudo-random
-function (PRF). Kravvate can absorb an arbitrary sized user message and
+function (PRF). Kravatte can absorb an arbitrary sized user message and
 key, and output an arbitrary collection of pseudo-random bytes that can
 act as a message authentication code.
 
@@ -106,7 +106,7 @@ Kravatte-SIV
 
 Kravatte-SIV mode is a method of authenticated encryption with
 associated metadata (AEAD) that allows for encrypting a provided
-plaintest with a secret shared key and an arbitrary metadata value.
+plaintext with a secret shared key and an arbitrary metadata value.
 Encryption generates an equal length ciphertext and fixed length tag
 that can be used to validate the plaintext at decryption. Metadata
 values can be shared for different key/message combinations with
@@ -230,7 +230,7 @@ KravatteWBC
 -----------
 
 Kravatte Wide Block Cipher mode is symmetric block cipher mode where the user can specify
-the size of the block, an arbitrary `tweak` value input, and arbitary secret key. The `KravatteWBC`
+the size of the block, an arbitrary `tweak` value input, and arbitrary secret key. The `KravatteWBC`
 object, once initialized can encrypt/decrypt messages of the given block size (or smaller). KravatteWBC
 is splits messages into left and right components and uses a 4-stage Feistal sequence to encrypt/decrypt.
 
