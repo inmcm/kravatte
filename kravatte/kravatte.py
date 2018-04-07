@@ -3,7 +3,11 @@ Kravatte Achouffe Cipher Suite: Encryption, Decryption, and Authentication Tools
 Copyright 2018 Michael Calvin McCoy
 """
 from math import floor, ceil, log2
+from typing import Tuple
 import numpy as np
+
+KravatteTagOutput = Tuple[bytes, bytes]
+KravatteValidatedOutput = Tuple[bytes, bool]
 
 
 class Kravatte(object):
@@ -51,7 +55,7 @@ class Kravatte(object):
                                   [4, 4, 4, 4, 4]])
     '''Column Re-order Mapping for Pi Step'''
 
-    def __init__(self, key=b''):
+    def __init__(self, key: bytes=b''):
         """
         Initialize Kravatte with user key
 
@@ -61,7 +65,7 @@ class Kravatte(object):
         self.update_key(key)
         self.reset_state()
 
-    def update_key(self, key):
+    def update_key(self, key: bytes) -> None:
         """
         Pad and compute new Kravatte base key from bytes source.
 
@@ -72,7 +76,7 @@ class Kravatte(object):
         key_array = np.frombuffer(key_pad, dtype=np.uint64, count=self.KECCAK_LANES, offset=0).reshape([self.KECCAK_PLANES_SLICES, self.KECCAK_PLANES_SLICES], order='F')
         self.kra_key = self._keecak(key_array)
 
-    def reset_state(self):
+    def reset_state(self) -> None:
         """
         Clear existing Farfalle/Kravatte state and prepares for new input message collection.
         Elements reset include:
@@ -90,7 +94,7 @@ class Kravatte(object):
         self.digest_active = False
         self.new_collector = True
 
-    def collect_message(self, message, append_bit=None):
+    def collect_message(self, message: bytes, append_bit: int=None) -> None:
         """
         Pad and Process Blocks of Message into Kravatte collector state
 
@@ -118,7 +122,7 @@ class Kravatte(object):
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.collector = self.collector ^ self._keecak(m_k)
 
-    def generate_digest(self, output_size, short_kravatte=False):
+    def generate_digest(self, output_size: int, short_kravatte: bool=False) -> None:
         """
         Squeeze an arbitrary number of bytes from collector state
 
@@ -238,7 +242,7 @@ class Kravatte(object):
         return state
 
     @staticmethod
-    def _pad_10_append(input_bytes, desired_length, append_bit=None):
+    def _pad_10_append(input_bytes: bytes, desired_length: int, append_bit: int=None) -> bytes:
         """
         Farfalle defined padding function. Limited to byte divisible inputs only
 
@@ -264,7 +268,7 @@ class Kravatte(object):
         return padded_bytes
 
     @staticmethod
-    def compare_bytes(a, b):
+    def compare_bytes(a: bytes, b: bytes) -> bool:
         """
         Time Constant Byte Comparison Function
         Inputs:
@@ -281,7 +285,7 @@ class Kravatte(object):
         return compare
 
 
-def mac(key, message, output_size):
+def mac(key: bytes, message: bytes, output_size: int) -> bytes:
     """
     Kravatte Message Authentication Code Generation of given length from a message
     based on a user provided key
@@ -300,7 +304,7 @@ def mac(key, message, output_size):
     return kravatte_mac_gen.digest
 
 
-def siv_wrap(key, message, metadata, tag_size=32):
+def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32) -> KravatteTagOutput:
     """
     Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and
     metadata using the Synthetic Initialization Vector method described in the Farfalle/Kravatte
@@ -334,7 +338,7 @@ def siv_wrap(key, message, metadata, tag_size=32):
     return ciphertext, siv_tag
 
 
-def siv_unwrap(key, ciphertext, siv_tag, metadata):
+def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes) -> KravatteValidatedOutput:
     """
     Decryption of Synthetic Initialization Vector method described in the Farfalle/Kravatte
     spec. Given a key, metadata, and validation tag, generates plaintext (of equivalent length to
@@ -379,7 +383,7 @@ class KravatteSAE(Kravatte):
     TAG_SIZE = 16
     OFFSET = TAG_SIZE
 
-    def __init__(self, nonce, key=b''):
+    def __init__(self, nonce: bytes, key: bytes=b''):
         """
         Initialize KravatteSAE with user key and nonce
 
@@ -390,7 +394,7 @@ class KravatteSAE(Kravatte):
         super(KravatteSAE, self).__init__(key)
         self.initialize_history(nonce)
 
-    def initialize_history(self, nonce):
+    def initialize_history(self, nonce: bytes) -> None:
         """
         Pad and compute new Kravatte base key from bytes source.
 
@@ -403,7 +407,7 @@ class KravatteSAE(Kravatte):
         self.generate_digest(self.TAG_SIZE)
         self.tag = self.digest.copy()
 
-    def sae_wrap(self, plaintext, metadata):
+    def sae_wrap(self, plaintext: bytes, metadata: bytes) -> KravatteTagOutput:
         """
         Encrypt an arbitrary plaintext message using the included metadata as part of an on-going
         session. Creates authentication tag for validation during decryption.
@@ -440,7 +444,7 @@ class KravatteSAE(Kravatte):
 
         return ciphertext, self.digest
 
-    def sae_unwrap(self, ciphertext, metadata, validation_tag):
+    def sae_unwrap(self, ciphertext: bytes, metadata: bytes, validation_tag: bytes) -> KravatteValidatedOutput:
         """
         Decrypt an arbitrary ciphertext message using the included metadata as part of an on-going
         session. Creates authentication tag for validation during decryption.
@@ -483,7 +487,7 @@ class KravatteSAE(Kravatte):
 
         return plaintext, valid_tag
 
-    def append_to_history(self, message, pad_bit):
+    def append_to_history(self, message: bytes, pad_bit: int) -> None:
         """
         Update history collector state with provided message.
 
@@ -517,7 +521,7 @@ class KravatteWBC(Kravatte):
     """ Configurable Wide Block Cipher encryption mode with customization tweak """
     SPLIT_THRESHOLD = 398
 
-    def __init__(self, block_cipher_size, tweak=b'', key=b''):
+    def __init__(self, block_cipher_size: int, tweak: bytes=b'', key: bytes=b''):
         """
         Initialize KravatteWBC object
 
@@ -530,7 +534,7 @@ class KravatteWBC(Kravatte):
         self.split_bytes(block_cipher_size)
         self.tweak = tweak
 
-    def split_bytes(self, message_size_bytes):
+    def split_bytes(self, message_size_bytes: int) -> None:
         """
         Calculates the size (in bytes) of the "left" and "right" components of the block encryption
         decryption process. Based on algorithm given in Farfalle spec.
@@ -547,7 +551,7 @@ class KravatteWBC(Kravatte):
         self.size_L = nL
         self.size_R = message_size_bytes - nL
 
-    def encrypt(self, message):
+    def encrypt(self, message: bytes) -> bytes:
         """
         Encrypt a user message using KravatteWBC mode
         Inputs:
@@ -586,7 +590,7 @@ class KravatteWBC(Kravatte):
         # C ← the concatenation of L and R
         return L + R
 
-    def decrypt(self, ciphertext):
+    def decrypt(self, ciphertext: bytes) -> bytes:
         """
         Decrypt a user message using KravatteWBC mode
         Inputs:
@@ -629,7 +633,7 @@ class KravatteWBC_AE(KravatteWBC):
     """ Authenication with associated metadata version Kravatte Wide Block Cipher encryption mode """
     WBC_AE_TAG_LEN = 16
 
-    def __init__(self, block_cipher_size, key=b''):
+    def __init__(self, block_cipher_size: int, key: bytes=b''):
         """
         Initialize KravatteWBC_AE object
 
@@ -639,7 +643,7 @@ class KravatteWBC_AE(KravatteWBC):
         """
         super(KravatteWBC_AE, self).__init__(block_cipher_size + self.WBC_AE_TAG_LEN, None, key=key)
 
-    def wrap(self, message, metadata):
+    def wrap(self, message: bytes, metadata: bytes) -> bytes:
         """
         Encrypt a user message and generate included authenticated data. Requires metadata input
         in lieu of customization tweak.
@@ -656,7 +660,7 @@ class KravatteWBC_AE(KravatteWBC):
         padded_message = message + (self.WBC_AE_TAG_LEN * b'\x00')
         return self.encrypt(padded_message)
 
-    def unwrap(self, ciphertext, metadata):
+    def unwrap(self, ciphertext: bytes, metadata: bytes) -> KravatteValidatedOutput:
         """
         Decrypt a ciphertext block and validate included authenticated data. Requires metadata input
         in lieu of customization tweak.
