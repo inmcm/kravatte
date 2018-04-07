@@ -284,6 +284,41 @@ Encrypt and Decrypt
     Out[13]: True
 
 
+KravatteOracle
+--------------
+
+KravatteOracle is simple pseduo-random number generator built from the Kravatte PRF primitive. Initialized
+with an authentication key, the KravatteOracle object absorbs an arbitrarily sized seed value into the
+collector state. From there, streams of random bytes can be generated on demand via the `random` method.
+The generator can be re-seeded at any point with the `seed_generator` method.
+
+Generate Random Numbers
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code:: python
+
+    In [1]: my_psrng = KravatteOracle(my_seed, my_key)
+    In [2]: my_key = b'1234'
+    In [3]: my_seed = b'watermelon'
+    In [4]: my_psrng = KravatteOracle(my_seed, my_key)
+    In [5]: random_bytes = my_psrng.random(24)
+    In [6]: hexlify(random_bytes)
+    Out[6]: b'14a42ab5756efe61eae73893570b6736b392d0031a87e36d'
+    In [7]: random_bytes = my_psrng.random(42)
+    In [8]: hexlify(random_bytes)
+    Out[8]: b'77d6308e18d57fb124e75602ced2e863e7de34c69ea57bec47efae84e85d0075c3ebbf7e535ec0fb096f'
+
+Re-seed Generator
+~~~~~~~~~~~~~~~~~
+
+.. code:: python
+
+    In [9]: my_psrng.seed_generator(b'apple')
+    In [10]: random_bytes = my_psrng.random(18)
+    In [11]: hexlify(random_bytes)
+    Out[11]: b'3e108c3f627f561943893b6a3184e5b76472'
+
+
 Testing
 -------
 

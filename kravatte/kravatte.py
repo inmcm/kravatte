@@ -135,6 +135,8 @@ class Kravatte(object):
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.digest_active = True
 
+        self.digest = bytearray(b'')
+
         full_output_size = output_size + (200 - (output_size % 200)) if output_size % 200 else output_size
         generate_steps = full_output_size // 200
 
@@ -723,6 +725,49 @@ class KravatteWBC_AE(KravatteWBC):
 
         # P′ ← L||R
         return (L + R)[:-self.WBC_AE_TAG_LEN], valid_plaintext
+
+
+class KravatteOracle(Kravatte):
+    """Pseudo-random byte stream generator. Accepts an authentication key and arbitrary sized seed
+    input. Once initialized, the random method can return an arbitrary amount of random output bytes
+    for each call. Generator collector state can be reinitialized at anytime with the seed_generator
+    method
+    """
+
+    def __init__(self, seed: bytes=b'', key: bytes=b''):
+        """
+        Initialize KravatteOracle with user key and seed.
+
+        Inputs:
+            seed (bytes) - random unique value to initialize the oracle object with
+            key (bytes) - secret key for authenticating generator
+        """
+        super(KravatteOracle, self).__init__(key)
+        self.seed_generator(seed)
+
+    def seed_generator(self, seed: bytes):
+        """
+        Re-seed Kravatte collector state with new seed data.
+
+        Input:
+            seed (bytes): Collection of seed bytes that are absorbed as single message
+        """
+        self.collect_message(seed)
+
+    def random(self, output_size: int) -> bytearray:
+        """
+        Generates a stream of pseudo-random bytes from the current state of the Kravatte collector
+        state
+
+        Input:
+            output_size (bytes): Number of bytes to return
+
+        Returns:
+            bytearray: Pseudo-random Kravatte squeezed collector output
+        """
+        self.generate_digest(output_size)
+        return self.digest
+
 
 if __name__ == "__main__":
     from time import perf_counter
