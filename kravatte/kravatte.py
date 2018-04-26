@@ -2,12 +2,15 @@
 Kravatte Achouffe Cipher Suite: Encryption, Decryption, and Authentication Tools based on the Farfalle modes
 Copyright 2018 Michael Calvin McCoy
 """
+from multiprocessing import Pool, TimeoutError, Queue
 from math import floor, ceil, log2
 from typing import Tuple
 import numpy as np
 
 KravatteTagOutput = Tuple[bytes, bytes]
 KravatteValidatedOutput = Tuple[bytes, bool]
+
+
 
 
 class Kravatte(object):
@@ -55,6 +58,8 @@ class Kravatte(object):
                                   [4, 4, 4, 4, 4]])
     '''Column Re-order Mapping for Pi Step'''
 
+    
+
     def __init__(self, key: bytes=b''):
         """
         Initialize Kravatte with user key
@@ -64,6 +69,8 @@ class Kravatte(object):
         """
         self.update_key(key)
         self.reset_state()
+        input_queue = Queue()
+        output_queue = Queue()
 
     def update_key(self, key: bytes) -> None:
         """
@@ -122,6 +129,40 @@ class Kravatte(object):
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.collector = self.collector ^ self._keecak(m_k)
 
+    def collect_message_mp(self, message: bytes, append_bit: int=None) -> None:
+        """
+        Pad and Process Blocks of Message into Kravatte collector state
+
+        Inputs:
+            message (bytes): arbitrary number of bytes to be padded into Keccak blocks and absorbed into the collector
+            append_bit (int): Either 1 or 0 to append to the message before padding. Required for more advanced Kravatte modes.
+        """
+        if self.digest_active:
+            self.reset_state()
+
+        if self.new_collector:
+            self.new_collector = False
+        else:
+            self.roll_key = self._kravatte_roll_compress(self.roll_key)
+
+        # Pad Message
+        msg_len = len(message)
+        kra_msg = self._pad_10_append(message, msg_len + (self.KECCACK_BYTES - (msg_len % self.KECCACK_BYTES)), append_bit)
+        absorb_steps = len(kra_msg) // self.KECCACK_BYTES
+
+        m_list = []
+
+        # Generate Queue
+        for msg_block in range(absorb_steps):
+            m_list.append(np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F') ^ self.roll_key)
+            self.roll_key = self._kravatte_roll_compress(self.roll_key)
+
+        with Pool(processes=8) as kravatte_pool:
+            blocks = kravatte_pool.map(self._keecak, m_list)
+
+        for output_element in blocks:
+            self.collector ^= output_element
+
     def generate_digest(self, output_size: int, short_kravatte: bool=False) -> None:
         """
         Squeeze an arbitrary number of bytes from collector state
@@ -144,6 +185,37 @@ class Kravatte(object):
             collector_squeeze = self._keecak(self.collector)
             self.collector = self._kravatte_roll_expand(self.collector)
             self.digest.extend((collector_squeeze ^ self.roll_key).tobytes('F'))
+
+        self.digest = self.digest[:output_size]
+
+    def generate_digest_mp(self, output_size: int, short_kravatte: bool=False) -> None:
+        """
+        Squeeze an arbitrary number of bytes from collector state
+
+        Inputs:
+            output_size (int): Number of bytes to generate and store in Kravatte digest parameter
+            short_kravatte (bool): Enable disable short kravatte required for other Kravatte modes
+        """
+        if not self.digest_active:
+            self.collector = self.collector if short_kravatte else self._keecak(self.collector)
+            self.roll_key = self._kravatte_roll_compress(self.roll_key)
+            self.digest_active = True
+
+        self.digest = bytearray(b'')
+
+        full_output_size = output_size + (200 - (output_size % 200)) if output_size % 200 else output_size
+        generate_steps = full_output_size // 200
+
+        m_list = []
+        for _ in range(generate_steps):
+            m_list.append(self.collector)
+            self.collector = self._kravatte_roll_expand(self.collector)
+
+        with Pool(processes=8) as kravatte_pool:
+            digest_blocks = kravatte_pool.map(self._keecak_xor_key, m_list)
+
+        for block in digest_blocks:
+            self.digest.extend(block.tobytes('F'))
 
         self.digest = self.digest[:output_size]
 
@@ -189,6 +261,49 @@ class Kravatte(object):
             # Exclusive-or first lane of state with round constant
             state[0, 0] ^= self.IOTA_CONSTANTS[round_num]
         return state
+
+    def _keecak_xor_key(self, input_array):
+        """
+        Implementation of Keccak-1600 PRF defined in FIPS 202
+
+        Inputs:
+            input_array (numpy array): Keccak compatible state array: 200-byte as 5x5 64-bit lanes
+        Return:
+            numpy array: Keccak compatible state array: 200-byte as 5x5 64-bit lanes
+        """
+
+        state = np.copy(input_array)
+
+        for round_num in range(6):
+
+            # theta_step:
+            # Exclusive-or each slice-lane by state based permutation value
+            tmp_array = np.copy(state)
+            array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
+            for out_slice, norm_slice, shift_slice in [(0, 4, 1), (1, 0, 2), (2, 1, 3), (3, 2, 4), (4, 3, 0)]:
+                c1 = tmp_array[norm_slice, 0] ^ tmp_array[norm_slice, 1] ^ tmp_array[norm_slice, 2] ^ tmp_array[norm_slice, 3] ^ tmp_array[norm_slice, 4]
+                c2 = array_shift[shift_slice, 0] ^ array_shift[shift_slice, 1] ^ array_shift[shift_slice, 2] ^ array_shift[shift_slice, 3] ^ array_shift[shift_slice, 4]
+                state[out_slice] ^= c1 ^ c2
+
+            # rho_step:
+            # Left Rotate each lane by pre-calculated value
+            for state_lane, t_mod in np.nditer([state, self.RHO_SHIFTS], flags=['external_loop'], op_flags=[['readwrite'], ['readonly']]):
+                state_lane[...] = state_lane << t_mod | state_lane >> 64 - t_mod
+
+            # pi_step:
+            # Shuffle lanes to pre-calculated positions
+            state = state[self.PI_ROW_REORDER, self.PI_COLUMN_REORDER]
+
+            # chi_step:
+            # Exclusive-or each individual lane based on and/invert permutation
+            tmp_array = np.copy(state)
+            for w, x, y in self.CHI_REORDER:
+                state[w] ^= ~tmp_array[x] & tmp_array[y]
+
+            # iota_step:
+            # Exclusive-or first lane of state with round constant
+            state[0, 0] ^= self.IOTA_CONSTANTS[round_num]
+        return state ^ self.roll_key
 
     @staticmethod
     def _kravatte_roll_compress(input_array):
@@ -773,8 +888,41 @@ if __name__ == "__main__":
     from time import perf_counter
     my_key = b'\xFF' * 32
     my_message = bytes([x % 256 for x in range(4 * 1024 * 1024)])
+
+    import hashlib
+    a1 = hashlib.md5()
+    a2 = hashlib.md5()
+
     start = perf_counter()
-    my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
+    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
+    my_kra = Kravatte(my_key)
+    my_kra.collect_message(my_message)
     stop = perf_counter()
     print("Process Time:", stop - start)
-    print(len(my_kra))
+    # print(my_kra.collector)
+
+    start = perf_counter()
+    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
+    my_kra.generate_digest(4 * 1024 * 1024)
+    stop = perf_counter()
+    print("Process Time:", stop - start)
+    print(my_kra.digest[-16:])
+    a1.update(my_kra.digest)
+
+    start = perf_counter()
+    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
+    my_kra = Kravatte(my_key)
+    my_kra.collect_message_mp(my_message)
+    stop = perf_counter()
+    print("Process Time:", stop - start)
+    # print(my_kra.collector)
+
+    start = perf_counter()
+    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
+    my_kra.generate_digest_mp(4 * 1024 * 1024)
+    stop = perf_counter()
+    print("Process Time:", stop - start)
+    print(my_kra.digest[-16:])
+    a2.update(my_kra.digest)
+    print(a1.digest())
+    print(a2.digest())
