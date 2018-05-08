@@ -2,15 +2,13 @@
 Kravatte Achouffe Cipher Suite: Encryption, Decryption, and Authentication Tools based on the Farfalle modes
 Copyright 2018 Michael Calvin McCoy
 """
-from multiprocessing import Pool, TimeoutError, Queue
+from multiprocessing import Pool
 from math import floor, ceil, log2
 from typing import Tuple
 import numpy as np
 
 KravatteTagOutput = Tuple[bytes, bytes]
 KravatteValidatedOutput = Tuple[bytes, bool]
-
-
 
 
 class Kravatte(object):
@@ -58,9 +56,7 @@ class Kravatte(object):
                                   [4, 4, 4, 4, 4]])
     '''Column Re-order Mapping for Pi Step'''
 
-    
-
-    def __init__(self, key: bytes=b''):
+    def __init__(self, key: bytes=b'', workers: int=None):
         """
         Initialize Kravatte with user key
 
@@ -69,8 +65,14 @@ class Kravatte(object):
         """
         self.update_key(key)
         self.reset_state()
-        input_queue = Queue()
-        output_queue = Queue()
+        if workers is not None:
+            self.collect_message = self._collect_message_mp
+            self.generate_digest = self._generate_digest_mp
+            self.workers = workers
+        else:
+            self.collect_message = self._collect_message_sp
+            self.generate_digest = self._generate_digest_sp
+            self.workers = None
 
     def update_key(self, key: bytes) -> None:
         """
@@ -101,7 +103,7 @@ class Kravatte(object):
         self.digest_active = False
         self.new_collector = True
 
-    def collect_message(self, message: bytes, append_bit: int=None) -> None:
+    def _collect_message_sp(self, message: bytes, append_bit: int=None) -> None:
         """
         Pad and Process Blocks of Message into Kravatte collector state
 
@@ -129,7 +131,7 @@ class Kravatte(object):
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.collector = self.collector ^ self._keecak(m_k)
 
-    def collect_message_mp(self, message: bytes, append_bit: int=None) -> None:
+    def _collect_message_mp(self, message: bytes, append_bit: int=None) -> None:
         """
         Pad and Process Blocks of Message into Kravatte collector state
 
@@ -157,13 +159,13 @@ class Kravatte(object):
             m_list.append(np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F') ^ self.roll_key)
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
 
-        with Pool(processes=8) as kravatte_pool:
+        with Pool(processes=self.workers) as kravatte_pool:
             blocks = kravatte_pool.map(self._keecak, m_list)
 
         for output_element in blocks:
             self.collector ^= output_element
 
-    def generate_digest(self, output_size: int, short_kravatte: bool=False) -> None:
+    def _generate_digest_sp(self, output_size: int, short_kravatte: bool=False) -> None:
         """
         Squeeze an arbitrary number of bytes from collector state
 
@@ -188,7 +190,7 @@ class Kravatte(object):
 
         self.digest = self.digest[:output_size]
 
-    def generate_digest_mp(self, output_size: int, short_kravatte: bool=False) -> None:
+    def _generate_digest_mp(self, output_size: int, short_kravatte: bool=False) -> None:
         """
         Squeeze an arbitrary number of bytes from collector state
 
@@ -211,7 +213,7 @@ class Kravatte(object):
             m_list.append(self.collector)
             self.collector = self._kravatte_roll_expand(self.collector)
 
-        with Pool(processes=8) as kravatte_pool:
+        with Pool(processes=self.workers) as kravatte_pool:
             digest_blocks = kravatte_pool.map(self._keecak_xor_key, m_list)
 
         for block in digest_blocks:
@@ -264,7 +266,7 @@ class Kravatte(object):
 
     def _keecak_xor_key(self, input_array):
         """
-        Implementation of Keccak-1600 PRF defined in FIPS 202
+        Implementation of Keccak-1600 PRF defined in FIPS 202 plus a XOR
 
         Inputs:
             input_array (numpy array): Keccak compatible state array: 200-byte as 5x5 64-bit lanes
@@ -402,7 +404,7 @@ class Kravatte(object):
         return compare
 
 
-def mac(key: bytes, message: bytes, output_size: int) -> bytes:
+def mac(key: bytes, message: bytes, output_size: int, workers: int=None) -> bytes:
     """
     Kravatte Message Authentication Code Generation of given length from a message
     based on a user provided key
@@ -415,13 +417,13 @@ def mac(key: bytes, message: bytes, output_size: int) -> bytes:
     Returns:
         bytes: message authentication bytes of length output_size
     """
-    kravatte_mac_gen = Kravatte(key)
+    kravatte_mac_gen = Kravatte(key, workers=workers)
     kravatte_mac_gen.collect_message(message)
     kravatte_mac_gen.generate_digest(output_size)
     return kravatte_mac_gen.digest
 
 
-def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32) -> KravatteTagOutput:
+def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32, workers: int=None) -> KravatteTagOutput:
     """
     Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and
     metadata using the Synthetic Initialization Vector method described in the Farfalle/Kravatte
@@ -439,7 +441,7 @@ def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32) -> K
         tuple (bytes, bytes): Bytes of ciphertext and tag
     """
     # Initialize Kravatte
-    kravatte_siv_wrap = Kravatte(key)
+    kravatte_siv_wrap = Kravatte(key, workers=workers)
 
     # Generate Tag From Metadata and Plaintext
     kravatte_siv_wrap.collect_message(metadata)
@@ -455,7 +457,7 @@ def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32) -> K
     return ciphertext, siv_tag
 
 
-def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes) -> KravatteValidatedOutput:
+def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes, workers: int=None) -> KravatteValidatedOutput:
     """
     Decryption of Synthetic Initialization Vector method described in the Farfalle/Kravatte
     spec. Given a key, metadata, and validation tag, generates plaintext (of equivalent length to
@@ -473,7 +475,7 @@ def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes) -
     """
 
     # Initialize Kravatte
-    kravatte_siv_unwrap = Kravatte(key)
+    kravatte_siv_unwrap = Kravatte(key, workers=workers)
 
     # Re-Generate Key Stream
     kravatte_siv_unwrap.collect_message(metadata)
@@ -500,7 +502,7 @@ class KravatteSAE(Kravatte):
     TAG_SIZE = 16
     OFFSET = TAG_SIZE
 
-    def __init__(self, nonce: bytes, key: bytes=b''):
+    def __init__(self, nonce: bytes, key: bytes=b'', workers: int=None):
         """
         Initialize KravatteSAE with user key and nonce
 
@@ -508,7 +510,7 @@ class KravatteSAE(Kravatte):
             nonce (bytes) - random unique value to initialize the session with
             key (bytes) - secret key for encrypting session messages
         """
-        super(KravatteSAE, self).__init__(key)
+        super(KravatteSAE, self).__init__(key, workers)
         self.initialize_history(nonce)
 
     def initialize_history(self, nonce: bytes) -> None:
@@ -638,7 +640,7 @@ class KravatteWBC(Kravatte):
     """ Configurable Wide Block Cipher encryption mode with customization tweak """
     SPLIT_THRESHOLD = 398
 
-    def __init__(self, block_cipher_size: int, tweak: bytes=b'', key: bytes=b''):
+    def __init__(self, block_cipher_size: int, tweak: bytes=b'', key: bytes=b'', workers: int=None):
         """
         Initialize KravatteWBC object
 
@@ -647,7 +649,7 @@ class KravatteWBC(Kravatte):
             tweak (bytes) - arbitrary value to customize cipher output
             key (bytes) - secret key for encrypting message blocks
         """
-        super(KravatteWBC, self).__init__(key)
+        super(KravatteWBC, self).__init__(key, workers)
         self.split_bytes(block_cipher_size)
         self.tweak = tweak
 
@@ -750,7 +752,7 @@ class KravatteWBC_AE(KravatteWBC):
     """ Authenication with associated metadata version Kravatte Wide Block Cipher encryption mode """
     WBC_AE_TAG_LEN = 16
 
-    def __init__(self, block_cipher_size: int, key: bytes=b''):
+    def __init__(self, block_cipher_size: int, key: bytes=b'', workers: int=None):
         """
         Initialize KravatteWBC_AE object
 
@@ -758,7 +760,7 @@ class KravatteWBC_AE(KravatteWBC):
             block_cipher_size (int) - size of block cipher in bytes
             key (bytes) - secret key for encrypting message blocks
         """
-        super(KravatteWBC_AE, self).__init__(block_cipher_size + self.WBC_AE_TAG_LEN, None, key=key)
+        super(KravatteWBC_AE, self).__init__(block_cipher_size + self.WBC_AE_TAG_LEN, None, key=key, workers=workers)
 
     def wrap(self, message: bytes, metadata: bytes) -> bytes:
         """
@@ -849,7 +851,7 @@ class KravatteOracle(Kravatte):
     method
     """
 
-    def __init__(self, seed: bytes=b'', key: bytes=b''):
+    def __init__(self, seed: bytes=b'', key: bytes=b'', workers: int=None):
         """
         Initialize KravatteOracle with user key and seed.
 
@@ -857,7 +859,7 @@ class KravatteOracle(Kravatte):
             seed (bytes) - random unique value to initialize the oracle object with
             key (bytes) - secret key for authenticating generator
         """
-        super(KravatteOracle, self).__init__(key)
+        super(KravatteOracle, self).__init__(key, workers)
         self.seed_generator(seed)
 
     def seed_generator(self, seed: bytes):
@@ -889,40 +891,102 @@ if __name__ == "__main__":
     my_key = b'\xFF' * 32
     my_message = bytes([x % 256 for x in range(4 * 1024 * 1024)])
 
+    # import hashlib
+    # a1 = hashlib.md5()
+    # a2 = hashlib.md5()
+
+    # start = perf_counter()
+    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
+    # stop = perf_counter()
+    # print("Process Time:", stop - start)
+    # a1.update(my_kra)
+
+    # start = perf_counter()
+    # # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
+    # my_kra.generate_digest(4 * 1024 * 1024)
+    # stop = perf_counter()
+    # print("Process Time:", stop - start)
+    # print(my_kra.digest[-16:])
+    # a1.update(my_kra.digest)
+
+    # start = perf_counter()
+    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024, workers=8)
+    # stop = perf_counter()
+    # print("Process Time:", stop - start)
+    # a2.update(my_kra)
+
+    # start = perf_counter()
+    # # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
+    # my_kra.generate_digest(4 * 1024 * 1024)
+    # stop = perf_counter()
+    # print("Process Time:", stop - start)
+    # print(my_kra.digest[-16:])
+    # a2.update(my_kra.digest)
+    # print(a1.digest())
+    # print(a2.digest())
+
+    import os
+    import random
     import hashlib
-    a1 = hashlib.md5()
-    a2 = hashlib.md5()
 
-    start = perf_counter()
-    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
-    my_kra = Kravatte(my_key)
-    my_kra.collect_message(my_message)
-    stop = perf_counter()
-    print("Process Time:", stop - start)
-    # print(my_kra.collector)
+    # for x in range(100):
+    #     a1 = hashlib.md5()
+    #     a2 = hashlib.md5()
+    #     msg_size = random.randint(0, 10000000)
+    #     digest_size = random.randint(0, 10000000)
+    #     my_message = os.urandom(msg_size)
+    #     print('message size:', msg_size)
+    #     print('digest size', digest_size)
 
-    start = perf_counter()
-    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
-    my_kra.generate_digest(4 * 1024 * 1024)
-    stop = perf_counter()
-    print("Process Time:", stop - start)
-    print(my_kra.digest[-16:])
-    a1.update(my_kra.digest)
+    #     start = perf_counter()
+    #     my_kra = mac(my_key, my_message, digest_size)
+    #     stop = perf_counter()
+    #     print("Process Time:", stop - start)
+    #     a1.update(my_kra)
 
-    start = perf_counter()
-    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
-    my_kra = Kravatte(my_key)
-    my_kra.collect_message_mp(my_message)
-    stop = perf_counter()
-    print("Process Time:", stop - start)
-    # print(my_kra.collector)
+    #     start = perf_counter()
+    #     my_kra = mac(my_key, my_message, digest_size, workers=8)
+    #     stop = perf_counter()
+    #     print("Process Time:", stop - start)
+    #     a2.update(my_kra)
 
-    start = perf_counter()
-    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
-    my_kra.generate_digest_mp(4 * 1024 * 1024)
-    stop = perf_counter()
-    print("Process Time:", stop - start)
-    print(my_kra.digest[-16:])
-    a2.update(my_kra.digest)
-    print(a1.digest())
-    print(a2.digest())
+    #     print(a1.digest())
+    #     print(a2.digest())
+
+    #     assert a1.digest() == a2.digest()
+
+    #     print('')
+
+
+    for x in range(2, 8):
+        a1 = hashlib.md5()
+        a2 = hashlib.md5()
+        msg_size = 10**x
+        digest_size = 10**x
+        my_message = os.urandom(msg_size)
+        print('message size:', msg_size)
+        print('digest size', digest_size)
+
+        start = perf_counter()
+        my_kra = mac(my_key, my_message, digest_size)
+        stop = perf_counter()
+        print("Process Time:", stop - start)
+        a1.update(my_kra)
+
+        start = perf_counter()
+        my_kra = mac(my_key, my_message, digest_size, workers=8)
+        stop = perf_counter()
+        print("Process Time:", stop - start)
+        a2.update(my_kra)
+
+        print(a1.digest())
+        print(a2.digest())
+
+        assert a1.digest() == a2.digest()
+
+        print('')
+
+
+
+
+
