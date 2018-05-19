@@ -1,10 +1,12 @@
 """
 Kravatte Achouffe Cipher Suite: Encryption, Decryption, and Authentication Tools based on the Farfalle modes
 Copyright 2018 Michael Calvin McCoy
+see LICENSE file
 """
 from multiprocessing import Pool
 from math import floor, ceil, log2
 from typing import Tuple
+from os import cpu_count
 import numpy as np
 
 KravatteTagOutput = Tuple[bytes, bytes]
@@ -61,14 +63,16 @@ class Kravatte(object):
         Initialize Kravatte with user key
 
         Inputs:
-            key (bytes)
+            key (bytes): encryption/authentication key
+            workers (int): parallel processes to use in compression/expansion operations
         """
         self.update_key(key)
         self.reset_state()
+        # Enable Standard or Optimized Multi-process codepaths
         if workers is not None:
             self.collect_message = self._collect_message_mp
             self.generate_digest = self._generate_digest_mp
-            self.workers = workers
+            self.workers = cpu_count() if workers == 0 else workers
         else:
             self.collect_message = self._collect_message_sp
             self.generate_digest = self._generate_digest_sp
@@ -82,8 +86,10 @@ class Kravatte(object):
             key (bytes): user provided bytes to be padded (if necessary) and computed into Kravatte base key
         """
         key_pad = self._pad_10_append(key, self.KECCACK_BYTES)
-        key_array = np.frombuffer(key_pad, dtype=np.uint64, count=self.KECCAK_LANES, offset=0).reshape([self.KECCAK_PLANES_SLICES, self.KECCAK_PLANES_SLICES], order='F')
-        self.kra_key = self._keecak(key_array)
+        key_array = np.frombuffer(key_pad, dtype=np.uint64, count=self.KECCAK_LANES,
+                                  offset=0).reshape([self.KECCAK_PLANES_SLICES,
+                                                     self.KECCAK_PLANES_SLICES], order='F')
+        self.kra_key = self._keccak(key_array)
 
     def reset_state(self) -> None:
         """
@@ -102,6 +108,18 @@ class Kravatte(object):
         self.digest = bytearray(b'')
         self.digest_active = False
         self.new_collector = True
+
+    def _generate_absorb_queue(self, absorb_steps: int, kra_msg: bytes):
+        """
+        Generator for Keccak-sized blocks of input message for Farfalle compression
+
+        Inputs:
+            absorb_steps (int): Number of blocks to generate for absorbtion
+            kra_msg (bytes): padded input message ready for slicing into input blocks
+        """
+        for msg_block in range(absorb_steps):
+            yield (np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F') ^ self.roll_key)
+            self.roll_key = self._kravatte_roll_compress(self.roll_key)
 
     def _collect_message_sp(self, message: bytes, append_bit: int=None) -> None:
         """
@@ -129,11 +147,11 @@ class Kravatte(object):
             m = np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F')
             m_k = m ^ self.roll_key
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
-            self.collector = self.collector ^ self._keecak(m_k)
+            self.collector = self.collector ^ self._keccak(m_k)
 
     def _collect_message_mp(self, message: bytes, append_bit: int=None) -> None:
         """
-        Pad and Process Blocks of Message into Kravatte collector state
+        Pad and Process Blocks of Message into Kravatte collector state - Multi-process Aware Variant
 
         Inputs:
             message (bytes): arbitrary number of bytes to be padded into Keccak blocks and absorbed into the collector
@@ -151,19 +169,10 @@ class Kravatte(object):
         msg_len = len(message)
         kra_msg = self._pad_10_append(message, msg_len + (self.KECCACK_BYTES - (msg_len % self.KECCACK_BYTES)), append_bit)
         absorb_steps = len(kra_msg) // self.KECCACK_BYTES
-
-        m_list = []
-
-        # Generate Queue
-        for msg_block in range(absorb_steps):
-            m_list.append(np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F') ^ self.roll_key)
-            self.roll_key = self._kravatte_roll_compress(self.roll_key)
-
+        workload = 1 if (absorb_steps // self.workers) == 0 else (absorb_steps // self.workers)
         with Pool(processes=self.workers) as kravatte_pool:
-            blocks = kravatte_pool.map(self._keecak, m_list)
-
-        for output_element in blocks:
-            self.collector ^= output_element
+            for output_element in kravatte_pool.imap_unordered(self._keccak, self._generate_absorb_queue(absorb_steps, kra_msg), chunksize=workload):
+                self.collector ^= output_element
 
     def _generate_digest_sp(self, output_size: int, short_kravatte: bool=False) -> None:
         """
@@ -174,7 +183,7 @@ class Kravatte(object):
             short_kravatte (bool): Enable disable short kravatte required for other Kravatte modes
         """
         if not self.digest_active:
-            self.collector = self.collector if short_kravatte else self._keecak(self.collector)
+            self.collector = self.collector if short_kravatte else self._keccak(self.collector)
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.digest_active = True
 
@@ -184,22 +193,33 @@ class Kravatte(object):
         generate_steps = full_output_size // 200
 
         for _ in range(generate_steps):
-            collector_squeeze = self._keecak(self.collector)
+            collector_squeeze = self._keccak(self.collector)
             self.collector = self._kravatte_roll_expand(self.collector)
             self.digest.extend((collector_squeeze ^ self.roll_key).tobytes('F'))
 
         self.digest = self.digest[:output_size]
 
+    def _generate_squeeze_queue(self, generate_steps: int):
+        """
+        Generator for Keccak-sized blocks of expanded collector state for output squeezing
+
+        Inputs:
+            generate_steps (int): Number of blocks to generate and for absorb
+        """
+        for _ in range(generate_steps):
+            yield self.collector
+            self.collector = self._kravatte_roll_expand(self.collector)
+
     def _generate_digest_mp(self, output_size: int, short_kravatte: bool=False) -> None:
         """
-        Squeeze an arbitrary number of bytes from collector state
+        Squeeze an arbitrary number of bytes from collector state - Multi-process Aware Variant
 
         Inputs:
             output_size (int): Number of bytes to generate and store in Kravatte digest parameter
             short_kravatte (bool): Enable disable short kravatte required for other Kravatte modes
         """
         if not self.digest_active:
-            self.collector = self.collector if short_kravatte else self._keecak(self.collector)
+            self.collector = self.collector if short_kravatte else self._keccak(self.collector)
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.digest_active = True
 
@@ -207,21 +227,15 @@ class Kravatte(object):
 
         full_output_size = output_size + (200 - (output_size % 200)) if output_size % 200 else output_size
         generate_steps = full_output_size // 200
-
-        m_list = []
-        for _ in range(generate_steps):
-            m_list.append(self.collector)
-            self.collector = self._kravatte_roll_expand(self.collector)
+        workload = 1 if (generate_steps // self.workers) == 0 else (generate_steps // self.workers)
 
         with Pool(processes=self.workers) as kravatte_pool:
-            digest_blocks = kravatte_pool.map(self._keecak_xor_key, m_list)
-
-        for block in digest_blocks:
-            self.digest.extend(block.tobytes('F'))
+            for digest_block in kravatte_pool.imap(self._keccak_xor_key, self._generate_squeeze_queue(generate_steps), chunksize=workload):
+                self.digest.extend(digest_block.tobytes('F'))
 
         self.digest = self.digest[:output_size]
 
-    def _keecak(self, input_array):
+    def _keccak(self, input_array):
         """
         Implementation of Keccak-1600 PRF defined in FIPS 202
 
@@ -240,8 +254,16 @@ class Kravatte(object):
             tmp_array = np.copy(state)
             array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
             for out_slice, norm_slice, shift_slice in [(0, 4, 1), (1, 0, 2), (2, 1, 3), (3, 2, 4), (4, 3, 0)]:
-                c1 = tmp_array[norm_slice, 0] ^ tmp_array[norm_slice, 1] ^ tmp_array[norm_slice, 2] ^ tmp_array[norm_slice, 3] ^ tmp_array[norm_slice, 4]
-                c2 = array_shift[shift_slice, 0] ^ array_shift[shift_slice, 1] ^ array_shift[shift_slice, 2] ^ array_shift[shift_slice, 3] ^ array_shift[shift_slice, 4]
+                c1 = tmp_array[norm_slice, 0] \
+                    ^ tmp_array[norm_slice, 1] \
+                    ^ tmp_array[norm_slice, 2] \
+                    ^ tmp_array[norm_slice, 3] \
+                    ^ tmp_array[norm_slice, 4]
+                c2 = array_shift[shift_slice, 0] \
+                    ^ array_shift[shift_slice, 1] \
+                    ^ array_shift[shift_slice, 2] \
+                    ^ array_shift[shift_slice, 3] \
+                    ^ array_shift[shift_slice, 4]
                 state[out_slice] ^= c1 ^ c2
 
             # rho_step:
@@ -264,9 +286,9 @@ class Kravatte(object):
             state[0, 0] ^= self.IOTA_CONSTANTS[round_num]
         return state
 
-    def _keecak_xor_key(self, input_array):
+    def _keccak_xor_key(self, input_array):
         """
-        Implementation of Keccak-1600 PRF defined in FIPS 202 plus a XOR
+        Implementation of Keccak-1600 PRF defined in FIPS 202 plus an XOR with the current key state
 
         Inputs:
             input_array (numpy array): Keccak compatible state array: 200-byte as 5x5 64-bit lanes
@@ -283,8 +305,16 @@ class Kravatte(object):
             tmp_array = np.copy(state)
             array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
             for out_slice, norm_slice, shift_slice in [(0, 4, 1), (1, 0, 2), (2, 1, 3), (3, 2, 4), (4, 3, 0)]:
-                c1 = tmp_array[norm_slice, 0] ^ tmp_array[norm_slice, 1] ^ tmp_array[norm_slice, 2] ^ tmp_array[norm_slice, 3] ^ tmp_array[norm_slice, 4]
-                c2 = array_shift[shift_slice, 0] ^ array_shift[shift_slice, 1] ^ array_shift[shift_slice, 2] ^ array_shift[shift_slice, 3] ^ array_shift[shift_slice, 4]
+                c1 = tmp_array[norm_slice, 0] \
+                    ^ tmp_array[norm_slice, 1] \
+                    ^ tmp_array[norm_slice, 2] \
+                    ^ tmp_array[norm_slice, 3] \
+                    ^ tmp_array[norm_slice, 4]
+                c2 = array_shift[shift_slice, 0] \
+                    ^ array_shift[shift_slice, 1] \
+                    ^ array_shift[shift_slice, 2] \
+                    ^ array_shift[shift_slice, 3] \
+                    ^ array_shift[shift_slice, 4]
                 state[out_slice] ^= c1 ^ c2
 
             # rho_step:
@@ -496,7 +526,7 @@ def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes, w
 
 class KravatteSAE(Kravatte):
     """
-    An authenicated encryption mode designed to track a session consisting of a series of messages 
+    An authenticated encryption mode designed to track a session consisting of a series of messages
     and an initialization nonce
     """
     TAG_SIZE = 16
@@ -633,7 +663,7 @@ class KravatteSAE(Kravatte):
             m = np.frombuffer(padded_bytes, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F')
             m_k = m ^ self.roll_key
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
-            self.collector = self.collector ^ self._keecak(m_k)
+            self.collector = self.collector ^ self._keccak(m_k)
 
 
 class KravatteWBC(Kravatte):
@@ -749,7 +779,7 @@ class KravatteWBC(Kravatte):
 
 
 class KravatteWBC_AE(KravatteWBC):
-    """ Authenication with associated metadata version Kravatte Wide Block Cipher encryption mode """
+    """ Authentication with associated metadata version Kravatte Wide Block Cipher encryption mode """
     WBC_AE_TAG_LEN = 16
 
     def __init__(self, block_cipher_size: int, key: bytes=b'', workers: int=None):
@@ -831,7 +861,7 @@ class KravatteWBC_AE(KravatteWBC):
             self.generate_digest(self.size_L)
             L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, self.digest)])
 
-            # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bytes of R 
+            # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bytes of R
             self.collect_message(L, append_bit=0)
             self.generate_digest(min(self.KECCACK_BYTES, self.size_R), short_kravatte=True)
             extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
@@ -888,105 +918,27 @@ class KravatteOracle(Kravatte):
 
 if __name__ == "__main__":
     from time import perf_counter
+    import hashlib
+    from binascii import hexlify
+    import os
     my_key = b'\xFF' * 32
     my_message = bytes([x % 256 for x in range(4 * 1024 * 1024)])
 
-    # import hashlib
-    # a1 = hashlib.md5()
-    # a2 = hashlib.md5()
+    print("Normal Message MAC Generation")
+    start = perf_counter()
+    my_kra = mac(my_key, my_message, 1024 * 1024 * 4)
+    stop = perf_counter()
+    print("Process Time:", stop - start)
+    a1 = hashlib.md5()
+    a1.update(my_kra)
+    print(hexlify(a1.digest()))
 
-    # start = perf_counter()
-    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
-    # stop = perf_counter()
-    # print("Process Time:", stop - start)
-    # a1.update(my_kra)
-
-    # start = perf_counter()
-    # # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
-    # my_kra.generate_digest(4 * 1024 * 1024)
-    # stop = perf_counter()
-    # print("Process Time:", stop - start)
-    # print(my_kra.digest[-16:])
-    # a1.update(my_kra.digest)
-
-    # start = perf_counter()
-    # my_kra = mac(my_key, my_message, 4 * 1024 * 1024, workers=8)
-    # stop = perf_counter()
-    # print("Process Time:", stop - start)
-    # a2.update(my_kra)
-
-    # start = perf_counter()
-    # # my_kra = mac(my_key, my_message, 4 * 1024 * 1024)
-    # my_kra.generate_digest(4 * 1024 * 1024)
-    # stop = perf_counter()
-    # print("Process Time:", stop - start)
-    # print(my_kra.digest[-16:])
-    # a2.update(my_kra.digest)
-    # print(a1.digest())
-    # print(a2.digest())
-
-    import os
-    import random
-    import hashlib
-
-    # for x in range(100):
-    #     a1 = hashlib.md5()
-    #     a2 = hashlib.md5()
-    #     msg_size = random.randint(0, 10000000)
-    #     digest_size = random.randint(0, 10000000)
-    #     my_message = os.urandom(msg_size)
-    #     print('message size:', msg_size)
-    #     print('digest size', digest_size)
-
-    #     start = perf_counter()
-    #     my_kra = mac(my_key, my_message, digest_size)
-    #     stop = perf_counter()
-    #     print("Process Time:", stop - start)
-    #     a1.update(my_kra)
-
-    #     start = perf_counter()
-    #     my_kra = mac(my_key, my_message, digest_size, workers=8)
-    #     stop = perf_counter()
-    #     print("Process Time:", stop - start)
-    #     a2.update(my_kra)
-
-    #     print(a1.digest())
-    #     print(a2.digest())
-
-    #     assert a1.digest() == a2.digest()
-
-    #     print('')
-
-
-    for x in range(2, 8):
-        a1 = hashlib.md5()
-        a2 = hashlib.md5()
-        msg_size = 10**x
-        digest_size = 10**x
-        my_message = os.urandom(msg_size)
-        print('message size:', msg_size)
-        print('digest size', digest_size)
-
-        start = perf_counter()
-        my_kra = mac(my_key, my_message, digest_size)
-        stop = perf_counter()
-        print("Process Time:", stop - start)
-        a1.update(my_kra)
-
-        start = perf_counter()
-        my_kra = mac(my_key, my_message, digest_size, workers=8)
-        stop = perf_counter()
-        print("Process Time:", stop - start)
-        a2.update(my_kra)
-
-        print(a1.digest())
-        print(a2.digest())
-
-        assert a1.digest() == a2.digest()
-
-        print('')
-
-
-
-
-
+    print("%d Process/Core Message MAC Generation" % os.cpu_count())
+    start = perf_counter()
+    my_kra = mac(my_key, my_message, 1024 * 1024 * 4, workers=os.cpu_count())
+    stop = perf_counter()
+    print("Process Time:", stop - start)
+    a2 = hashlib.md5()
+    a2.update(my_kra)
+    print(hexlify(a2.digest()))
+    assert a1.digest() == a2.digest()
