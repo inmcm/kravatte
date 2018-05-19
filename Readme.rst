@@ -24,13 +24,13 @@ available within this repo as well.
 
 Installation
 ------------
-Kravatte can be easily installed from `pypi <https://pypi.org/project/kravatte/>`__ via `pip`:
+Kravatte can be easily installed from `pypi <https://pypi.org/project/kravatte/>`__ via ``pip``:
 
 .. code:: bash
 
     $ pip install kravatte
 
-If `pip` is unavailable, this repo can be cloned and setup can be done manually:
+If ``pip`` is unavailable, this repo can be cloned and setup can be done manually:
 
 .. code:: bash
 
@@ -40,8 +40,8 @@ If `pip` is unavailable, this repo can be cloned and setup can be done manually:
 Kravatte Object
 ---------------
 
-The basic Kravatte object operates on two Keecak-1600 state matrices;
-the collector state and the key state. Instantiating a Kravatte object
+The basic ``Kravatte`` object operates on two Keecak-1600 state matrices;
+the collector state and the key state. Instantiating a ``Kravatte`` object
 initializes the key state with provided user key and sets the collector
 state to zeros.
 
@@ -50,7 +50,7 @@ state to zeros.
     In [1]: from kravatte import Kravatte
     In [2]: my_krav = Kravatte(b'1234567890')
 
-The newly initialized Kravatte object is now ready to accept input
+The newly initialized ``Kravatte`` object is now ready to accept input
 strings of bytes for absorption into the collector state via the
 ``collect_message`` method. Repeated calls to ``collect_message`` are
 equivalent to ``B ◦ A`` sequences as described in the the Farfalle
@@ -63,7 +63,7 @@ spec:
     In [5]: input_b = b'3533392d36302d35313235'
     In [6]: my_krav.collect_message(input_b)
 
-Once absorbing message strings is complete, the Kravatte object can
+Once absorbing message strings is complete, the ``Kravatte`` object can
 produce an arbitrary number of pseudo-random output bytes via the
 ``generate_digest`` method. Those bytes are then available in the
 ``digest`` attribute:
@@ -85,10 +85,10 @@ state used at the start of message absorption.
 MAC
 ---
 
-The most basic mode of Kravatte is an authenticated pseudo-random
-function (PRF). Kravatte can absorb an arbitrary sized user message and
+The most basic mode of ``Kravatte`` is an authenticated pseudo-random
+function (PRF). ``Kravatte`` can absorb an arbitrary sized user message and
 key, and output an arbitrary collection of pseudo-random bytes that can
-act as a message authentication code.
+act as a message authentication code. The ``mac`` does this in a single step:
 
 .. code:: python
 
@@ -104,7 +104,7 @@ act as a message authentication code.
 Kravatte-SIV
 ------------
 
-Kravatte-SIV mode is a method of authenticated encryption with
+``Kravatte-SIV`` mode is a method of authenticated encryption with
 associated metadata (AEAD) that allows for encrypting a provided
 plaintext with a secret shared key and an arbitrary metadata value.
 Encryption generates an equal length ciphertext and fixed length tag
@@ -144,7 +144,7 @@ Decrypt
 Kravatte-SAE
 ------------
 
-Kravatte-SAE mode is a session based method of AEAD. Given a random
+``Kravatte-SAE`` mode is a session based method of AEAD. Given a random
 nonce and secret key, this mode encrypts a sequence of plaintext
 messages and/or metadata into equal size ciphertexts and a validation
 tag. The sequence of plaintext/metadata is tracked as a history that
@@ -229,9 +229,9 @@ Decrypt
 KravatteWBC
 -----------
 
-Kravatte Wide Block Cipher mode is symmetric block cipher mode where the user can specify
-the size of the block, an arbitrary `tweak` value input, and arbitrary secret key. The `KravatteWBC`
-object, once initialized can encrypt/decrypt messages of the given block size (or smaller). KravatteWBC
+Kravatte Wide Block Cipher mode is a symmetric block cipher mode where the user can specify
+the size of the block, an arbitrary ``tweak`` value input, and arbitrary secret key. The ``KravatteWBC``
+object, once initialized, can encrypt/decrypt messages of the given block size (or smaller). ``KravatteWBC``
 is splits messages into left and right components and uses a 4-stage Feistal sequence to encrypt/decrypt.
 
 Encrypt and Decrypt
@@ -255,7 +255,7 @@ Encrypt and Decrypt
 KravatteWBC-AE
 --------------
 
-KravatteWBC-AE is a variant of KravatteWBC that extends the desired block size by 16 bytes and 
+``KravatteWBC-AE`` is a variant of ``KravatteWBC`` that extends the desired block size by 16 bytes and 
 embeds authentication data. The tweak is replaced with arbitrary associated metadata. When the 
 block is decrypted it is also validated as being encrypted with same secret key.
 
@@ -287,10 +287,10 @@ Encrypt and Decrypt
 KravatteOracle
 --------------
 
-KravatteOracle is simple pseduo-random number generator built from the Kravatte PRF primitive. Initialized
-with an authentication key, the KravatteOracle object absorbs an arbitrarily sized seed value into the
-collector state. From there, streams of random bytes can be generated on demand via the `random` method.
-The generator can be re-seeded at any point with the `seed_generator` method.
+``KravatteOracle`` is simple pseduo-random number generator built from the ``Kravatte`` PRF primitive. Initialized
+with an authentication key, the ``KravatteOracle`` object absorbs an arbitrarily sized seed value into the
+collector state. From there, streams of random bytes can be generated on demand via the ``random`` method.
+The generator can be re-seeded at any point with the ``seed_generator`` method.
 
 Generate Random Numbers
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -319,6 +319,39 @@ Re-seed Generator
     Out[11]: b'3e108c3f627f561943893b6a3184e5b76472'
 
 
+Multi-Process Performance Mode
+---------------------------------
+The Farfalle PRF allows for significant parallelism in both the compression and expansion phases when
+consuming or generating large numbers of blocks.  We can exploit that fact for increased performance
+via Python's `multiprocessing <https://docs.python.org/3.5/library/multiprocessing.html>`__ module.
+This allows us to spawn any number of identical worker subprocesses that can consume additional
+CPU core resources. Enabling the multi-process mode is done at object creation time for ``Kravatte``,
+or any of its operating modes, with the ``workers`` arguments:
+
+.. code:: python
+
+    In [1]: new_kravatte = Kravatte(my_key, workers=8)
+    In [2]: my_kra_mac = mac(my_key, my_message, my_output_size, workers=16)
+    In [3]: my_wbc = KravatteWBC(block_size, my_tweak, my_key, workers=4)
+
+For optimal performance, the number of workers should match the number of CPU cores reported by
+``os.cpu_count``. This is set automatically if ``workers`` is set to 0:
+
+.. code:: python
+    
+    # Equivalent objects
+    In [4]: my_psrng = KravatteOracle(my_seed, my_key, workers=0)
+    In [5]: my_psrng = KravatteOracle(my_seed, my_key, workers=os.cpu_count())
+
+Multi-process mode can be explicitly disabled by setting workers to ``None``:
+
+.. code:: python
+    
+    In [5]: my_psrng = KravatteOracle(my_seed, my_key, workers=None)
+
+There is a non-trivial performance cost associated with generating new Python processes. For small,
+generally < 100KB, inputs and outputs, it can be faster to use the single process variant.
+
 Testing
 -------
 
@@ -329,15 +362,15 @@ tests can be invoked with pytest:
 
     $ pytest -xvvv test_kravatte.py
 
-Test vectors were generated using the
-`KeccakTools <https://github.com/gvanas/KeccakTools>`__ C++ library
-available from the Keccak Team
+The same tests are run against the standard codepath and the multiprocess code path utilizing all available
+CPU cores. Test vectors were generated using the
+`KeccakTools <https://github.com/gvanas/KeccakTools>`__ C++ library available from the Keccak Team
 
 Caveats
 -------
 
 -  Being a Python implementation, performance on large files or data
-   sets may be inadequate.
+   sets may be inadequate (even with multi-processing enabeled).
 -  The inputs and outputs of this implementation are limited to byte
    (8-bit) divisible sizes
 -  While security was top of mind during development, this
