@@ -7461,3 +7461,4 @@ class TestOfficialTestVectors:
                                       [0x0, 0x0, 0x0, 0x0, 0x0]], dtype=np.uint64)
         np.testing.assert_array_equal(g.kra_key, zero_keccak_array)
         np.testing.assert_array_equal(g.collector, zero_keccak_array)
+        np.testing.assert_array_equal(g.roll_key, zero_keccak_array)

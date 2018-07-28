@@ -358,6 +358,11 @@ class Kravatte(object):
         key_location = self.kra_key.ctypes.data
         memset(key_location, 0x00, self.KECCAK_BYTES)
 
+        # Clear Kravatte rolling key array
+        key_location = self.roll_key.ctypes.data
+        memset(key_location, 0x00, self.KECCAK_BYTES)
+        
+
     @staticmethod
     def _kravatte_roll_compress(input_array):
         """
@@ -950,11 +955,11 @@ if __name__ == "__main__":
     from binascii import hexlify
     import os
     my_key = b'\xFF' * 32
-    my_message = bytes([x % 256 for x in range(4 * 1024 * 1024)])
+    my_message = bytes([x % 256 for x in range(10 * 1024 * 1024)])
 
     print("Normal Message MAC Generation")
     start = perf_counter()
-    my_kra = mac(my_key, my_message, 1024 * 1024 * 4)
+    my_kra = mac(my_key, my_message, 1024 * 1024 * 10)
     stop = perf_counter()
     print("Process Time:", stop - start)
     a1 = hashlib.md5()
@@ -963,7 +968,7 @@ if __name__ == "__main__":
 
     print("%d Process/Core Message MAC Generation" % os.cpu_count())
     start = perf_counter()
-    my_kra = mac(my_key, my_message, 1024 * 1024 * 4, workers=os.cpu_count())
+    my_kra = mac(my_key, my_message, 1024 * 1024 * 10, workers=os.cpu_count())
     stop = perf_counter()
     print("Process Time:", stop - start)
     a2 = hashlib.md5()
