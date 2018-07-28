@@ -1,6 +1,6 @@
-import pytest
 import hashlib
-from kravatte import mac, siv_wrap, siv_unwrap, KravatteSAE, KravatteWBC, KravatteWBC_AE, KravatteOracle
+import numpy as np
+from kravatte import mac, siv_wrap, siv_unwrap, Kravatte, KravatteSAE, KravatteWBC, KravatteWBC_AE, KravatteOracle
 
 
 # Official Test Vectors
@@ -7424,3 +7424,40 @@ class TestOfficialTestVectors:
         hashed_output = hashlib.md5()
         hashed_output.update(my_kra)
         assert hashed_output.digest() == real_output_hash
+
+    def test_kravatte_scrub(self, test_workers):
+        """Verify Scrub clear key and collector arrays """
+        g = Kravatte(b'123456789ABCDEF0', workers=test_workers)
+        g.collect_message(b"Alan Turing's Birthday is June 23rd")
+        active_collector_state = np.array([[0x47f2a8301022502b, 0x175a0ba024f597e6, 0x9b4e04613147e6ef,
+                                            0x1765b925c31c079e, 0x6ab67495fea87309],
+                                           [0xa0e08cf91f6036e7, 0xbde524db485dd8c5, 0xd5bef8ec82ec546c,
+                                            0x1d5d5bb702ecd106, 0xd2859d853decd0ba],
+                                           [0x933a7ae8cbc00112, 0x9670141bc39379b4, 0x8592eca8ed33d40a,
+                                            0x633024eb4c392d43, 0x68832b65ee7815f6],
+                                           [0xfbd578b54286aacb, 0x77d40e7b2453f93a, 0x97650682ed2063aa,
+                                            0x10247404d7916fb, 0x2c1aa50e5985f0d7],
+                                           [0xf8c6c899ee338b89, 0xad3149bd7cd30c52, 0x5ca8af3af0a6095f,
+                                            0x29c8b966c76d3ab2, 0x897804d9e8d92c88]], dtype=np.uint64)
+        active_key_state = np.array([[0xfd3dc5a634820be2, 0xda84238d059df308, 0xe1273a75cbe9ca79,
+                                      0xb42c26e0142eb005, 0xe408e6c3432721ae],
+                                     [0xfda5f1b13312de28, 0x8550cb0da540eb36, 0xe659e72afb21d426,
+                                      0xa8a129c543ba8cfe, 0x9e4f929e6a3ab546],
+                                     [0x491282fd4e25cf37, 0xf2d80d06aad4c4d7, 0xcb26fbbba4611f6b,
+                                      0xd5326fcd86c85641, 0x51cb367bf84cbf1],
+                                     [0xdce9402ead58c081, 0x41d58bb12faa6eb3, 0x84bf1457dc9a9002,
+                                      0xe3eb07702cb8d973, 0xf6cf479fbee020de],
+                                     [0xb877c006a804f95d, 0xf8fa17134fd29bee, 0x4270ff5f591d0054,
+                                      0x3662557cd15143f4, 0x21aad09eda854b56]], dtype=np.uint64)
+        np.testing.assert_array_equal(g.kra_key, active_key_state)
+        np.testing.assert_array_equal(g.collector, active_collector_state)
+        # Clear collector and key state
+        g.scrub()
+
+        zero_keccak_array = np.array([[0x0, 0x0, 0x0, 0x0, 0x0],
+                                      [0x0, 0x0, 0x0, 0x0, 0x0],
+                                      [0x0, 0x0, 0x0, 0x0, 0x0],
+                                      [0x0, 0x0, 0x0, 0x0, 0x0],
+                                      [0x0, 0x0, 0x0, 0x0, 0x0]], dtype=np.uint64)
+        np.testing.assert_array_equal(g.kra_key, zero_keccak_array)
+        np.testing.assert_array_equal(g.collector, zero_keccak_array)

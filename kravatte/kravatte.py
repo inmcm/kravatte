@@ -7,6 +7,7 @@ from multiprocessing import Pool
 from math import floor, ceil, log2
 from typing import Tuple
 from os import cpu_count
+from ctypes import memset
 import numpy as np
 
 KravatteTagOutput = Tuple[bytes, bytes]
@@ -336,6 +337,26 @@ class Kravatte(object):
             # Exclusive-or first lane of state with round constant
             state[0, 0] ^= self.IOTA_CONSTANTS[round_num]
         return state ^ self.roll_key
+
+    def scrub(self):
+        """
+        Explicitly zero out both the key and collector array states. Use prior to reinitialization of
+        key or when finished with object to help avoid leaving secret/interim data in memory.
+        WARNING: Does not guarantee other copies of these arrays are not present elsewhere in memory
+        Not applicable in multi-process mode.
+
+        Inputs:
+            None
+        Return:
+            None
+        """
+        # Clear collector array
+        collector_location = self.collector.ctypes.data
+        memset(collector_location, 0x00, self.KECCAK_BYTES)
+
+        # Clear Kravatte base key array
+        key_location = self.kra_key.ctypes.data
+        memset(key_location, 0x00, self.KECCAK_BYTES)
 
     @staticmethod
     def _kravatte_roll_compress(input_array):
