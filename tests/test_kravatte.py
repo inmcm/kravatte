@@ -10,7 +10,7 @@ class TestOfficialTestVectors:
     """
     def test_kravatte_k_0_msg_0_out_250(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 0 Bytes
             Message Size - 0 Bytes
             Output Size - 250 Bytes
@@ -43,7 +43,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_0_msg_64_out_128(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 0 Bytes
             Message Size - 64 Bytes
             Output Size - 128 Bytes
@@ -71,7 +71,7 @@ class TestOfficialTestVectors:
     
     def test_kravatte_k_1_msg_64_out_128(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 1 Bytes
             Message Size - 64 Bytes
             Output Size - 128 Bytes
@@ -99,7 +99,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_8_msg_64_out_128(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 8 Bytes
             Message Size - 64 Bytes
             Output Size - 128 Bytes
@@ -127,7 +127,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_128_msg_512_out_200(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code:
+        Basic Kravatte Message Authentication Code:
             Key Size - 128 Bytes
             Message Size - 512 Bytes
             Output Size - 200 Bytes
@@ -208,7 +208,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_128_msg_512_out_201(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 128 Bytes
             Message Size - 512 Bytes
             Output Size - 201 Bytes
@@ -289,7 +289,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_128_msg_512_out_1024(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 128 Bytes
             Message Size - 512 Bytes
             Output Size - 1024 Bytes
@@ -439,7 +439,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_24_msg_3200_out_6400(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 24 Bytes
             Message Size - 3200 Bytes
             Output Size - 6400 Bytes
@@ -1252,7 +1252,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_24_msg_1400_out_5800(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 24 Bytes
             Message Size - 1400 Bytes
             Output Size - 5800 Bytes
@@ -1865,7 +1865,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_32_msg_1400_out_5800(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 32 Bytes
             Message Size - 1400 Bytes
             Output Size - 5800 Bytes
@@ -2479,7 +2479,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_32_msg_1234_out_5678(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 32 Bytes
             Message Size - 1234 Bytes
             Output Size - 5678 Bytes
@@ -3069,7 +3069,7 @@ class TestOfficialTestVectors:
     
     def test_kravatte_k_123_msg_456_out_789(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 123 Bytes
             Message Size - 456 Bytes
             Output Size - 789 Bytes
@@ -3194,7 +3194,7 @@ class TestOfficialTestVectors:
 
     def test_kravatte_k_55_msg_555_out_555(self, test_workers):
         """
-        Basic Kravatte Message Authenication Code: 
+        Basic Kravatte Message Authentication Code:
             Key Size - 55 Bytes
             Message Size - 555 Bytes
             Output Size - 555 Bytes

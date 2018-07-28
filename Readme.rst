@@ -40,7 +40,7 @@ If ``pip`` is unavailable, this repo can be cloned and setup can be done manuall
 Kravatte Object
 ---------------
 
-The basic ``Kravatte`` object operates on two Keecak-1600 state matrices;
+The basic ``Kravatte`` object operates on two Keccak-1600 state matrices;
 the collector state and the key state. Instantiating a ``Kravatte`` object
 initializes the key state with provided user key and sets the collector
 state to zeros.
@@ -232,7 +232,7 @@ KravatteWBC
 Kravatte Wide Block Cipher mode is a symmetric block cipher mode where the user can specify
 the size of the block, an arbitrary ``tweak`` value input, and arbitrary secret key. The ``KravatteWBC``
 object, once initialized, can encrypt/decrypt messages of the given block size (or smaller). ``KravatteWBC``
-is splits messages into left and right components and uses a 4-stage Feistal sequence to encrypt/decrypt.
+splits messages into left and right components and uses a 4-stage Feistel sequence to encrypt/decrypt.
 
 Encrypt and Decrypt
 ~~~~~~~~~~~~~~~~~~~
@@ -287,7 +287,7 @@ Encrypt and Decrypt
 KravatteOracle
 --------------
 
-``KravatteOracle`` is simple pseduo-random number generator built from the ``Kravatte`` PRF primitive. Initialized
+``KravatteOracle`` is a simple pseudo-random number generator built from the ``Kravatte`` PRF primitive. Initialized
 with an authentication key, the ``KravatteOracle`` object absorbs an arbitrarily sized seed value into the
 collector state. From there, streams of random bytes can be generated on demand via the ``random`` method.
 The generator can be re-seeded at any point with the ``seed_generator`` method.
@@ -370,7 +370,7 @@ Caveats
 -------
 
 -  Being a Python implementation, performance on large files or data
-   sets may be inadequate (even with multi-processing enabeled).
+   sets may be inadequate (even with multi-processing enabled).
 -  The inputs and outputs of this implementation are limited to byte
    (8-bit) divisible sizes
 -  While security was top of mind during development, this

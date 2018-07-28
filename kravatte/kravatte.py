@@ -17,7 +17,7 @@ class Kravatte(object):
     """Implementation of the Farfalle Pseudo-Random Function (PRF) construct utilizing the
     Keccak-1600 permutation.
     """
-    KECCACK_BYTES = 200
+    KECCAK_BYTES = 200
     '''Number of Bytes in Keccak-1600 state'''
     KECCAK_LANES = 25
     '''Number of 8-Byte lanes in Keccak-1600 state'''
@@ -28,7 +28,7 @@ class Kravatte(object):
     IOTA_CONSTANTS = np.array([0x000000000000800A, 0x800000008000000A, 0x8000000080008081,
                                0x8000000000008080, 0x0000000080000001, 0x8000000080008008],
                               dtype=np.uint64)
-    '''Iota Step Round Constants For Keecak-p(1600, 4) and Keecak-p(1600, 6)'''
+    '''Iota Step Round Constants For Keccak-p(1600, 4) and Keccak-p(1600, 6)'''
 
     RHO_SHIFTS = np.array([[0, 36, 3, 41, 18],
                            [1, 44, 10, 45, 2],
@@ -85,7 +85,7 @@ class Kravatte(object):
         Inputs:
             key (bytes): user provided bytes to be padded (if necessary) and computed into Kravatte base key
         """
-        key_pad = self._pad_10_append(key, self.KECCACK_BYTES)
+        key_pad = self._pad_10_append(key, self.KECCAK_BYTES)
         key_array = np.frombuffer(key_pad, dtype=np.uint64, count=self.KECCAK_LANES,
                                   offset=0).reshape([self.KECCAK_PLANES_SLICES,
                                                      self.KECCAK_PLANES_SLICES], order='F')
@@ -114,11 +114,11 @@ class Kravatte(object):
         Generator for Keccak-sized blocks of input message for Farfalle compression
 
         Inputs:
-            absorb_steps (int): Number of blocks to generate for absorbtion
+            absorb_steps (int): Number of blocks to generate for absorption
             kra_msg (bytes): padded input message ready for slicing into input blocks
         """
         for msg_block in range(absorb_steps):
-            yield (np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F') ^ self.roll_key)
+            yield (np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCAK_BYTES).reshape([5, 5], order='F') ^ self.roll_key)
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
 
     def _collect_message_sp(self, message: bytes, append_bit: int=None) -> None:
@@ -139,12 +139,12 @@ class Kravatte(object):
 
         # Pad Message
         msg_len = len(message)
-        kra_msg = self._pad_10_append(message, msg_len + (self.KECCACK_BYTES - (msg_len % self.KECCACK_BYTES)), append_bit)
-        absorb_steps = len(kra_msg) // self.KECCACK_BYTES
+        kra_msg = self._pad_10_append(message, msg_len + (self.KECCAK_BYTES - (msg_len % self.KECCAK_BYTES)), append_bit)
+        absorb_steps = len(kra_msg) // self.KECCAK_BYTES
 
         # Absorb into Collector
         for msg_block in range(absorb_steps):
-            m = np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F')
+            m = np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCAK_BYTES).reshape([5, 5], order='F')
             m_k = m ^ self.roll_key
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.collector = self.collector ^ self._keccak(m_k)
@@ -167,8 +167,8 @@ class Kravatte(object):
 
         # Pad Message
         msg_len = len(message)
-        kra_msg = self._pad_10_append(message, msg_len + (self.KECCACK_BYTES - (msg_len % self.KECCACK_BYTES)), append_bit)
-        absorb_steps = len(kra_msg) // self.KECCACK_BYTES
+        kra_msg = self._pad_10_append(message, msg_len + (self.KECCAK_BYTES - (msg_len % self.KECCAK_BYTES)), append_bit)
+        absorb_steps = len(kra_msg) // self.KECCAK_BYTES
         workload = 1 if (absorb_steps // self.workers) == 0 else (absorb_steps // self.workers)
         with Pool(processes=self.workers) as kravatte_pool:
             for output_element in kravatte_pool.imap_unordered(self._keccak, self._generate_absorb_queue(absorb_steps, kra_msg), chunksize=workload):
@@ -443,6 +443,7 @@ def mac(key: bytes, message: bytes, output_size: int, workers: int=None) -> byte
         key (bytes): User authentication key (0 - 200 bytes)
         message (bytes): User message
         output_size (int): Size of authenticated digest in bytes
+        workers (int): parallel processes to use in compression/expansion operations
 
     Returns:
         bytes: message authentication bytes of length output_size
@@ -466,6 +467,7 @@ def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32, work
         metadata (bytes): Nonce/Seed value for authenticated encryption
         tag_size (int, optional): The tag size in bytes. Defaults to 32 bytes as defined in the
             Kravatte spec
+        workers (int): parallel processes to use in compression/expansion operations
 
     Returns:
         tuple (bytes, bytes): Bytes of ciphertext and tag
@@ -499,6 +501,7 @@ def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes, w
         ciphertext (bytes): Ciphertext SIV Message
         siv_tag (bytes): Authenticating byte string
         metadata (bytes): Metadata used to encrypt message and generate tag
+        workers (int): parallel processes to use in compression/expansion operations
 
     Returns:
         tuple (bytes, boolean): Bytes of plaintext and message validation boolean
@@ -539,6 +542,7 @@ class KravatteSAE(Kravatte):
         Inputs:
             nonce (bytes) - random unique value to initialize the session with
             key (bytes) - secret key for encrypting session messages
+            workers (int): parallel processes to use in compression/expansion operations
         """
         super(KravatteSAE, self).__init__(key, workers)
         self.initialize_history(nonce)
@@ -654,13 +658,13 @@ class KravatteSAE(Kravatte):
 
         # Pad Message with a single bit and then
         start_len = len(message)
-        padded_len = start_len + (self.KECCACK_BYTES - (start_len % self.KECCACK_BYTES))
+        padded_len = start_len + (self.KECCAK_BYTES - (start_len % self.KECCAK_BYTES))
         padded_bytes = self._pad_10_append(message, padded_len, pad_bit)
-        absorb_steps = len(padded_bytes) // self.KECCACK_BYTES
+        absorb_steps = len(padded_bytes) // self.KECCAK_BYTES
 
         # Absorb into Collector
         for msg_block in range(absorb_steps):
-            m = np.frombuffer(padded_bytes, dtype=np.uint64, count=25, offset=msg_block * self.KECCACK_BYTES).reshape([5, 5], order='F')
+            m = np.frombuffer(padded_bytes, dtype=np.uint64, count=25, offset=msg_block * self.KECCAK_BYTES).reshape([5, 5], order='F')
             m_k = m ^ self.roll_key
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.collector = self.collector ^ self._keccak(m_k)
@@ -678,6 +682,7 @@ class KravatteWBC(Kravatte):
             block_cipher_size (int) - size of block cipher in bytes
             tweak (bytes) - arbitrary value to customize cipher output
             key (bytes) - secret key for encrypting message blocks
+            workers (int): parallel processes to use in compression/expansion operations
         """
         super(KravatteWBC, self).__init__(key, workers)
         self.split_bytes(block_cipher_size)
@@ -694,9 +699,9 @@ class KravatteWBC(Kravatte):
         if message_size_bytes <= self.SPLIT_THRESHOLD:
             nL = ceil(message_size_bytes / 2)
         else:
-            q = floor(((message_size_bytes + 1) / self.KECCACK_BYTES)) + 1
+            q = floor(((message_size_bytes + 1) / self.KECCAK_BYTES)) + 1
             x = floor(log2(q - 1))
-            nL = ((q - (2**x)) * self.KECCACK_BYTES) - 1
+            nL = ((q - (2**x)) * self.KECCAK_BYTES) - 1
         self.size_L = nL
         self.size_R = message_size_bytes - nL
 
@@ -714,7 +719,7 @@ class KravatteWBC(Kravatte):
 
         # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bits of R
         self.collect_message(L, append_bit=0)
-        self.generate_digest(min(self.KECCACK_BYTES, self.size_R), short_kravatte=True)
+        self.generate_digest(min(self.KECCAK_BYTES, self.size_R), short_kravatte=True)
         extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
         R = bytes([p_text ^ key_stream for p_text, key_stream in zip(R, extended_digest)])
 
@@ -732,7 +737,7 @@ class KravatteWBC(Kravatte):
 
         # L0 ← L0 + HK(R||1), with L0 the first min(b, |L|) bits of L
         self.collect_message(R, append_bit=1)
-        self.generate_digest(min(self.KECCACK_BYTES, self.size_L), short_kravatte=True)
+        self.generate_digest(min(self.KECCAK_BYTES, self.size_L), short_kravatte=True)
         extended_digest = self.digest + ((self.size_L - len(self.digest)) * b'\x00')
         L = bytes([p_text ^ key_stream for p_text, key_stream in zip(L, extended_digest)])
 
@@ -752,7 +757,7 @@ class KravatteWBC(Kravatte):
 
         # L0 ← L0 + HK(R||1), with L0 the first min(b, |L|) bits of L
         self.collect_message(R, append_bit=1)
-        self.generate_digest(min(self.KECCACK_BYTES, self.size_L), short_kravatte=True)
+        self.generate_digest(min(self.KECCAK_BYTES, self.size_L), short_kravatte=True)
         extended_digest = self.digest + ((self.size_L - len(self.digest)) * b'\x00')
         L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, extended_digest)])
 
@@ -770,7 +775,7 @@ class KravatteWBC(Kravatte):
 
         # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bits of R
         self.collect_message(L, append_bit=0)
-        self.generate_digest(min(self.KECCACK_BYTES, self.size_R), short_kravatte=True)
+        self.generate_digest(min(self.KECCAK_BYTES, self.size_R), short_kravatte=True)
         extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
         R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, extended_digest)])
 
@@ -789,8 +794,9 @@ class KravatteWBC_AE(KravatteWBC):
         Inputs:
             block_cipher_size (int) - size of block cipher in bytes
             key (bytes) - secret key for encrypting message blocks
+            workers (int): parallel processes to use in compression/expansion operations
         """
-        super(KravatteWBC_AE, self).__init__(block_cipher_size + self.WBC_AE_TAG_LEN, None, key=key, workers=workers)
+        super(KravatteWBC_AE, self).__init__(block_cipher_size + self.WBC_AE_TAG_LEN, b'', key=key, workers=workers)
 
     def wrap(self, message: bytes, metadata: bytes) -> bytes:
         """
@@ -827,7 +833,7 @@ class KravatteWBC_AE(KravatteWBC):
 
         # L0 ← L0 + HK(R||1), with L0 the first min(b, |L|) bits of L
         self.collect_message(R, append_bit=1)
-        self.generate_digest(min(self.KECCACK_BYTES, self.size_L), short_kravatte=True)
+        self.generate_digest(min(self.KECCAK_BYTES, self.size_L), short_kravatte=True)
         extended_digest = self.digest + ((self.size_L - len(self.digest)) * b'\x00')
         L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, extended_digest)])
 
@@ -838,9 +844,9 @@ class KravatteWBC_AE(KravatteWBC):
         R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, self.digest)])
 
         # |R| ≥ b+t
-        if self.size_R >= self.KECCACK_BYTES + self.WBC_AE_TAG_LEN:
+        if self.size_R >= self.KECCAK_BYTES + self.WBC_AE_TAG_LEN:
             # if the last t bytes of R ̸= 0t then return error!
-            valid_plaintext = valid_plaintext = True if R[-self.WBC_AE_TAG_LEN:] == (self.WBC_AE_TAG_LEN * b'\x00') else False
+            valid_plaintext = True if R[-self.WBC_AE_TAG_LEN:] == (self.WBC_AE_TAG_LEN * b'\x00') else False
 
             # L ← L + GK (R||1 ◦ A)
             self.collect_message(self.tweak)
@@ -850,7 +856,7 @@ class KravatteWBC_AE(KravatteWBC):
 
             # R0 ← R0 + HK(L||0), with R0 the first b bytes of R
             self.collect_message(L, append_bit=0)
-            self.generate_digest(self.KECCACK_BYTES, short_kravatte=True)
+            self.generate_digest(self.KECCAK_BYTES, short_kravatte=True)
             extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
             R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, extended_digest)])
 
@@ -863,7 +869,7 @@ class KravatteWBC_AE(KravatteWBC):
 
             # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bytes of R
             self.collect_message(L, append_bit=0)
-            self.generate_digest(min(self.KECCACK_BYTES, self.size_R), short_kravatte=True)
+            self.generate_digest(min(self.KECCAK_BYTES, self.size_R), short_kravatte=True)
             extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
             R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, extended_digest)])
 
@@ -888,6 +894,7 @@ class KravatteOracle(Kravatte):
         Inputs:
             seed (bytes) - random unique value to initialize the oracle object with
             key (bytes) - secret key for authenticating generator
+            workers (int): parallel processes to use in compression/expansion operations
         """
         super(KravatteOracle, self).__init__(key, workers)
         self.seed_generator(seed)
