@@ -26,6 +26,8 @@ class Kravatte(object):
     KECCAK_PLANES_SLICES = 5
     ''' Size of x/y dimensions of Keccak lane array  '''
 
+    THETA_REORDER = ((4, 0, 1, 2, 3), (1, 2, 3, 4, 0))
+
     IOTA_CONSTANTS = np.array([0x000000000000800A, 0x800000008000000A, 0x8000000080008081,
                                0x8000000000008080, 0x0000000080000001, 0x8000000080008008],
                               dtype=np.uint64)
@@ -38,11 +40,7 @@ class Kravatte(object):
                            [27, 20, 39, 8, 14]], dtype=np.uint64)
     '''Lane Shifts for Rho Step'''
 
-    CHI_REORDER = [(0, 1, 2),
-                   (1, 2, 3),
-                   (2, 3, 4),
-                   (3, 4, 0),
-                   (4, 0, 1)]
+    CHI_REORDER = ((1, 2, 3, 4, 0), (2, 3, 4, 0, 1))
     '''Lane Re-order Mapping for Chi Step'''
 
     PI_ROW_REORDER = np.array([[0, 3, 1, 4, 2],
@@ -252,25 +250,12 @@ class Kravatte(object):
 
             # theta_step:
             # Exclusive-or each slice-lane by state based permutation value
-            tmp_array = np.copy(state)
-            array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
-            for out_slice, norm_slice, shift_slice in [(0, 4, 1), (1, 0, 2), (2, 1, 3), (3, 2, 4), (4, 3, 0)]:
-                c1 = tmp_array[norm_slice, 0] \
-                    ^ tmp_array[norm_slice, 1] \
-                    ^ tmp_array[norm_slice, 2] \
-                    ^ tmp_array[norm_slice, 3] \
-                    ^ tmp_array[norm_slice, 4]
-                c2 = array_shift[shift_slice, 0] \
-                    ^ array_shift[shift_slice, 1] \
-                    ^ array_shift[shift_slice, 2] \
-                    ^ array_shift[shift_slice, 3] \
-                    ^ array_shift[shift_slice, 4]
-                state[out_slice] ^= c1 ^ c2
+            array_shift = state << 1 | state >> 63
+            state ^= np.bitwise_xor.reduce(state[self.THETA_REORDER[0], ], 1, keepdims=True) ^ np.bitwise_xor.reduce(array_shift[self.THETA_REORDER[1], ], 1, keepdims=True)
 
             # rho_step:
             # Left Rotate each lane by pre-calculated value
-            for state_lane, t_mod in np.nditer([state, self.RHO_SHIFTS], flags=['external_loop'], op_flags=[['readwrite'], ['readonly']]):
-                state_lane[...] = state_lane << t_mod | state_lane >> 64 - t_mod
+            state = state << self.RHO_SHIFTS | state >> np.uint64(64 - self.RHO_SHIFTS)
 
             # pi_step:
             # Shuffle lanes to pre-calculated positions
@@ -278,13 +263,12 @@ class Kravatte(object):
 
             # chi_step:
             # Exclusive-or each individual lane based on and/invert permutation
-            tmp_array = np.copy(state)
-            for w, x, y in self.CHI_REORDER:
-                state[w] ^= ~tmp_array[x] & tmp_array[y]
+            state ^= ~state[self.CHI_REORDER[0], ] & state[self.CHI_REORDER[1], ]
 
             # iota_step:
             # Exclusive-or first lane of state with round constant
             state[0, 0] ^= self.IOTA_CONSTANTS[round_num]
+
         return state
 
     def _keccak_xor_key(self, input_array):
@@ -303,25 +287,12 @@ class Kravatte(object):
 
             # theta_step:
             # Exclusive-or each slice-lane by state based permutation value
-            tmp_array = np.copy(state)
-            array_shift = np.left_shift(state, 1) | np.right_shift(state, 63)
-            for out_slice, norm_slice, shift_slice in [(0, 4, 1), (1, 0, 2), (2, 1, 3), (3, 2, 4), (4, 3, 0)]:
-                c1 = tmp_array[norm_slice, 0] \
-                    ^ tmp_array[norm_slice, 1] \
-                    ^ tmp_array[norm_slice, 2] \
-                    ^ tmp_array[norm_slice, 3] \
-                    ^ tmp_array[norm_slice, 4]
-                c2 = array_shift[shift_slice, 0] \
-                    ^ array_shift[shift_slice, 1] \
-                    ^ array_shift[shift_slice, 2] \
-                    ^ array_shift[shift_slice, 3] \
-                    ^ array_shift[shift_slice, 4]
-                state[out_slice] ^= c1 ^ c2
+            array_shift = state << 1 | state >> 63
+            state ^= np.bitwise_xor.reduce(state[self.THETA_REORDER[0], ], 1, keepdims=True) ^ np.bitwise_xor.reduce(array_shift[self.THETA_REORDER[1], ], 1, keepdims=True)
 
             # rho_step:
             # Left Rotate each lane by pre-calculated value
-            for state_lane, t_mod in np.nditer([state, self.RHO_SHIFTS], flags=['external_loop'], op_flags=[['readwrite'], ['readonly']]):
-                state_lane[...] = state_lane << t_mod | state_lane >> 64 - t_mod
+            state = state << self.RHO_SHIFTS | state >> np.uint64(64 - self.RHO_SHIFTS)
 
             # pi_step:
             # Shuffle lanes to pre-calculated positions
@@ -329,13 +300,12 @@ class Kravatte(object):
 
             # chi_step:
             # Exclusive-or each individual lane based on and/invert permutation
-            tmp_array = np.copy(state)
-            for w, x, y in self.CHI_REORDER:
-                state[w] ^= ~tmp_array[x] & tmp_array[y]
+            state ^= ~state[self.CHI_REORDER[0], ] & state[self.CHI_REORDER[1], ]
 
             # iota_step:
             # Exclusive-or first lane of state with round constant
             state[0, 0] ^= self.IOTA_CONSTANTS[round_num]
+
         return state ^ self.roll_key
 
     def scrub(self):
@@ -955,11 +925,11 @@ if __name__ == "__main__":
     from binascii import hexlify
     import os
     my_key = b'\xFF' * 32
-    my_message = bytes([x % 256 for x in range(10 * 1024 * 1024)])
+    my_message = bytes([x % 256 for x in range(4 * 1024 * 1024)])
 
     print("Normal Message MAC Generation")
     start = perf_counter()
-    my_kra = mac(my_key, my_message, 1024 * 1024 * 10)
+    my_kra = mac(my_key, my_message, 1024 * 1024 * 4)
     stop = perf_counter()
     print("Process Time:", stop - start)
     a1 = hashlib.md5()
@@ -968,7 +938,7 @@ if __name__ == "__main__":
 
     print("%d Process/Core Message MAC Generation" % os.cpu_count())
     start = perf_counter()
-    my_kra = mac(my_key, my_message, 1024 * 1024 * 10, workers=os.cpu_count())
+    my_kra = mac(my_key, my_message, 1024 * 1024 * 4, workers=os.cpu_count())
     stop = perf_counter()
     print("Process Time:", stop - start)
     a2 = hashlib.md5()
