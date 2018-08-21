@@ -57,20 +57,22 @@ class Kravatte(object):
                                   [4, 4, 4, 4, 4]])
     '''Column Re-order Mapping for Pi Step'''
 
-    def __init__(self, key: bytes=b'', workers: int=None):
+    def __init__(self, key: bytes=b'', workers: int=None, mp_input: bool=True, mp_output: bool=True):
         """
         Initialize Kravatte with user key
 
         Inputs:
             key (bytes): encryption/authentication key
             workers (int): parallel processes to use in compression/expansion operations
+            mp_input (bool): Enable multi-processing for calculations on input data
+            mp_output (bool): Enable multi-processing for calculations on output data
         """
         self.update_key(key)
         self.reset_state()
         # Enable Standard or Optimized Multi-process codepaths
         if workers is not None:
-            self.collect_message = self._collect_message_mp
-            self.generate_digest = self._generate_digest_mp
+            self.collect_message = self._collect_message_mp if mp_input else self._collect_message_sp
+            self.generate_digest = self._generate_digest_mp if mp_output else self._generate_digest_sp
             self.workers = cpu_count() if workers == 0 else workers
         else:
             self.collect_message = self._collect_message_sp
@@ -331,7 +333,6 @@ class Kravatte(object):
         # Clear Kravatte rolling key array
         key_location = self.roll_key.ctypes.data
         memset(key_location, 0x00, self.KECCAK_BYTES)
-        
 
     @staticmethod
     def _kravatte_roll_compress(input_array):
@@ -430,7 +431,8 @@ class Kravatte(object):
         return compare
 
 
-def mac(key: bytes, message: bytes, output_size: int, workers: int=None) -> bytes:
+def mac(key: bytes, message: bytes, output_size: int, workers: int=None, mp_input: bool=True,
+        mp_output: bool=True) -> bytearray:
     """
     Kravatte Message Authentication Code Generation of given length from a message
     based on a user provided key
@@ -440,17 +442,20 @@ def mac(key: bytes, message: bytes, output_size: int, workers: int=None) -> byte
         message (bytes): User message
         output_size (int): Size of authenticated digest in bytes
         workers (int): parallel processes to use in compression/expansion operations
+        mp_input (bool): Enable multi-processing for calculations on input data
+        mp_output (bool): Enable multi-processing for calculations on output data
 
     Returns:
         bytes: message authentication bytes of length output_size
     """
-    kravatte_mac_gen = Kravatte(key, workers=workers)
+    kravatte_mac_gen = Kravatte(key, workers=workers, mp_input=mp_input, mp_output=mp_output)
     kravatte_mac_gen.collect_message(message)
     kravatte_mac_gen.generate_digest(output_size)
     return kravatte_mac_gen.digest
 
 
-def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32, workers: int=None) -> KravatteTagOutput:
+def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32, workers: int=None,
+             mp_input: bool=True, mp_output: bool=True) -> KravatteTagOutput:
     """
     Authenticated Encryption with Associated Data (AEAD) of a provided plaintext using a key and
     metadata using the Synthetic Initialization Vector method described in the Farfalle/Kravatte
@@ -464,12 +469,14 @@ def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32, work
         tag_size (int, optional): The tag size in bytes. Defaults to 32 bytes as defined in the
             Kravatte spec
         workers (int): parallel processes to use in compression/expansion operations
+        mp_input (bool): Enable multi-processing for calculations on input data
+        mp_output (bool): Enable multi-processing for calculations on output data
 
     Returns:
         tuple (bytes, bytes): Bytes of ciphertext and tag
     """
     # Initialize Kravatte
-    kravatte_siv_wrap = Kravatte(key, workers=workers)
+    kravatte_siv_wrap = Kravatte(key, workers=workers, mp_input=mp_input, mp_output=mp_output)
 
     # Generate Tag From Metadata and Plaintext
     kravatte_siv_wrap.collect_message(metadata)
@@ -485,7 +492,8 @@ def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32, work
     return ciphertext, siv_tag
 
 
-def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes, workers: int=None) -> KravatteValidatedOutput:
+def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes, workers: int=None,
+               mp_input: bool=True, mp_output: bool=True) -> KravatteValidatedOutput:
     """
     Decryption of Synthetic Initialization Vector method described in the Farfalle/Kravatte
     spec. Given a key, metadata, and validation tag, generates plaintext (of equivalent length to
@@ -498,13 +506,15 @@ def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes, w
         siv_tag (bytes): Authenticating byte string
         metadata (bytes): Metadata used to encrypt message and generate tag
         workers (int): parallel processes to use in compression/expansion operations
+        mp_input (bool): Enable multi-processing for calculations on input data
+        mp_output (bool): Enable multi-processing for calculations on output data
 
     Returns:
         tuple (bytes, boolean): Bytes of plaintext and message validation boolean
     """
 
     # Initialize Kravatte
-    kravatte_siv_unwrap = Kravatte(key, workers=workers)
+    kravatte_siv_unwrap = Kravatte(key, workers=workers, mp_input=mp_input, mp_output=mp_output)
 
     # Re-Generate Key Stream
     kravatte_siv_unwrap.collect_message(metadata)
@@ -531,23 +541,26 @@ class KravatteSAE(Kravatte):
     TAG_SIZE = 16
     OFFSET = TAG_SIZE
 
-    def __init__(self, nonce: bytes, key: bytes=b'', workers: int=None):
+    def __init__(self, nonce: bytes, key: bytes=b'', workers: int=None, mp_input: bool=True,
+                 mp_output: bool=True):
         """
         Initialize KravatteSAE with user key and nonce
 
-        Inputs:
+        Args:
             nonce (bytes) - random unique value to initialize the session with
             key (bytes) - secret key for encrypting session messages
             workers (int): parallel processes to use in compression/expansion operations
+            mp_input (bool): Enable multi-processing for calculations on input data
+            mp_output (bool): Enable multi-processing for calculations on output data
         """
-        super(KravatteSAE, self).__init__(key, workers)
+        super(KravatteSAE, self).__init__(key, workers, mp_input, mp_output)
         self.initialize_history(nonce)
 
     def initialize_history(self, nonce: bytes) -> None:
         """
         Pad and compute new Kravatte base key from bytes source.
 
-        Inputs:
+        Args:
             key (bytes): user provided bytes to be padded (if necessary) and computed into Kravatte base key
         """
         self.collect_message(nonce)
@@ -561,7 +574,7 @@ class KravatteSAE(Kravatte):
         Encrypt an arbitrary plaintext message using the included metadata as part of an on-going
         session. Creates authentication tag for validation during decryption.
 
-        Inputs:
+        Args:
             plaintext (bytes): user plaintext of arbitrary length
             metadata (bytes): associated data to ensure a unique encryption permutation
 
@@ -598,7 +611,7 @@ class KravatteSAE(Kravatte):
         Decrypt an arbitrary ciphertext message using the included metadata as part of an on-going
         session. Creates authentication tag for validation during decryption.
 
-        Inputs:
+        Args:
             ciphertext (bytes): user ciphertext of arbitrary length
             metadata (bytes): associated data from encryption
             validation_tag (bytes): collection of bytes that authenticates the decrypted plaintext as
@@ -640,7 +653,7 @@ class KravatteSAE(Kravatte):
         """
         Update history collector state with provided message.
 
-        Inputs:
+        Args:
             message (bytes): arbitrary number of bytes to be padded into Keccak blocks and absorbed into the collector
             pad_bit (int): Either 1 or 0 to append to the end of the regular message before padding
         """
@@ -670,7 +683,8 @@ class KravatteWBC(Kravatte):
     """ Configurable Wide Block Cipher encryption mode with customization tweak """
     SPLIT_THRESHOLD = 398
 
-    def __init__(self, block_cipher_size: int, tweak: bytes=b'', key: bytes=b'', workers: int=None):
+    def __init__(self, block_cipher_size: int, tweak: bytes=b'', key: bytes=b'', workers: int=None,
+                 mp_input: bool=True, mp_output: bool=True):
         """
         Initialize KravatteWBC object
 
@@ -679,8 +693,10 @@ class KravatteWBC(Kravatte):
             tweak (bytes) - arbitrary value to customize cipher output
             key (bytes) - secret key for encrypting message blocks
             workers (int): parallel processes to use in compression/expansion operations
+            mp_input (bool): Enable multi-processing for calculations on input data
+            mp_output (bool): Enable multi-processing for calculations on output data
         """
-        super(KravatteWBC, self).__init__(key, workers)
+        super(KravatteWBC, self).__init__(key, workers, mp_input, mp_output)
         self.split_bytes(block_cipher_size)
         self.tweak = tweak
 
@@ -743,7 +759,7 @@ class KravatteWBC(Kravatte):
     def decrypt(self, ciphertext: bytes) -> bytes:
         """
         Decrypt a user message using KravatteWBC mode
-        Inputs:
+        Args:
             message (bytes): ciphertext message to decrypt.
         Returns:
             bytes: decrypted block same length as ciphertext
@@ -783,23 +799,28 @@ class KravatteWBC_AE(KravatteWBC):
     """ Authentication with associated metadata version Kravatte Wide Block Cipher encryption mode """
     WBC_AE_TAG_LEN = 16
 
-    def __init__(self, block_cipher_size: int, key: bytes=b'', workers: int=None):
+    def __init__(self, block_cipher_size: int, key: bytes=b'', workers: int=None,
+                 mp_input: bool=True, mp_output: bool=True):
         """
         Initialize KravatteWBC_AE object
 
-        Inputs:
+        Args:
             block_cipher_size (int) - size of block cipher in bytes
             key (bytes) - secret key for encrypting message blocks
             workers (int): parallel processes to use in compression/expansion operations
+            mp_input (bool): Enable multi-processing for calculations on input data
+            mp_output (bool): Enable multi-processing for calculations on output data
         """
-        super(KravatteWBC_AE, self).__init__(block_cipher_size + self.WBC_AE_TAG_LEN, b'', key=key, workers=workers)
+        super(KravatteWBC_AE, self).__init__(block_cipher_size + self.WBC_AE_TAG_LEN, b'', key=key,
+                                             workers=workers, mp_input=mp_input,
+                                             mp_output=mp_output)
 
     def wrap(self, message: bytes, metadata: bytes) -> bytes:
         """
         Encrypt a user message and generate included authenticated data. Requires metadata input
         in lieu of customization tweak.
 
-        Inputs:
+        Args:
             message (bytes): User message same length as configured object block size
             metadata (bytes): associated metadata to ensure unique output
 
@@ -816,7 +837,7 @@ class KravatteWBC_AE(KravatteWBC):
         Decrypt a ciphertext block and validate included authenticated data. Requires metadata input
         in lieu of customization tweak.
 
-        Inputs:
+        Args:
             message (bytes): ciphertext same length as configured object block size
             metadata (bytes): associated metadata to ensure unique output
 
@@ -883,7 +904,8 @@ class KravatteOracle(Kravatte):
     method
     """
 
-    def __init__(self, seed: bytes=b'', key: bytes=b'', workers: int=None):
+    def __init__(self, seed: bytes=b'', key: bytes=b'', workers: int=None, mp_input: bool=True,
+                 mp_output: bool=True):
         """
         Initialize KravatteOracle with user key and seed.
 
@@ -891,8 +913,10 @@ class KravatteOracle(Kravatte):
             seed (bytes) - random unique value to initialize the oracle object with
             key (bytes) - secret key for authenticating generator
             workers (int): parallel processes to use in compression/expansion operations
+            mp_input (bool): Enable multi-processing for calculations on input data
+            mp_output (bool): Enable multi-processing for calculations on output data
         """
-        super(KravatteOracle, self).__init__(key, workers)
+        super(KravatteOracle, self).__init__(key, workers, mp_input, mp_input)
         self.seed_generator(seed)
 
     def seed_generator(self, seed: bytes):
