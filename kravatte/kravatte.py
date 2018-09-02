@@ -57,6 +57,34 @@ class Kravatte(object):
                                   [4, 4, 4, 4, 4]])
     '''Column Re-order Mapping for Pi Step'''
 
+    COMPRESS_ROW_REORDER = np.array([[0, 0, 0, 0, 1],
+                                     [1, 1, 1, 1, 2],
+                                     [2, 2, 2, 2, 3],
+                                     [3, 3, 3, 3, 4],
+                                     [4, 4, 4, 4, 0]])
+    '''Row Re-order Mapping for Compress Step'''
+
+    COMPRESS_COLUMN_REORDER = np.array([[0, 1, 2, 3, 4],
+                                        [0, 1, 2, 3, 4],
+                                        [0, 1, 2, 3, 4],
+                                        [0, 1, 2, 3, 4],
+                                        [0, 1, 2, 3, 4]])
+    '''Column Re-order Mapping for Compress Step'''
+
+    EXPAND_ROW_REORDER = np.array([[0, 0, 0, 1, 1],
+                                   [1, 1, 1, 2, 2],
+                                   [2, 2, 2, 3, 3],
+                                   [3, 3, 3, 4, 4],
+                                   [4, 4, 4, 0, 0]])
+    '''Row Re-order Mapping for Expand Step'''
+
+    EXPAND_COLUMN_REORDER = np.array([[0, 1, 2, 3, 4],
+                                      [0, 1, 2, 3, 4],
+                                      [0, 1, 2, 3, 4],
+                                      [0, 1, 2, 3, 4],
+                                      [0, 1, 2, 4, 4]])
+    '''Column Re-order Mapping for Expand Step'''
+
     def __init__(self, key: bytes=b'', workers: int=None, mp_input: bool=True, mp_output: bool=True):
         """
         Initialize Kravatte with user key
@@ -334,8 +362,7 @@ class Kravatte(object):
         key_location = self.roll_key.ctypes.data
         memset(key_location, 0x00, self.KECCAK_BYTES)
 
-    @staticmethod
-    def _kravatte_roll_compress(input_array):
+    def _kravatte_roll_compress(self, input_array):
         """
         Kravatte defined roll function for compression side of Farfalle PRF
 
@@ -344,19 +371,13 @@ class Kravatte(object):
         Return:
             numpy array: Keccak compatible state array: 200-byte as 5x5 64-bit lanes
         """
-        state = np.copy(input_array)
-        tmp_plane = state[0:5, 4]
-        tmp_plane[0] = tmp_plane[1]
-        tmp_plane[1] = tmp_plane[2]
-        tmp_plane[2] = tmp_plane[3]
-        tmp_plane[3] = tmp_plane[4]
-        rotate_lane = ((input_array[0][4] << np.uint64(7)) | (input_array[0][4] >> np.uint64(57)))
-        tmp_plane[4] = rotate_lane ^ input_array[1][4] ^ (input_array[1][4] >> np.uint64(3))
-        state[0:5, 4] = tmp_plane
+        state = input_array[self.COMPRESS_ROW_REORDER, self.COMPRESS_COLUMN_REORDER]
+        state[4, 4] = ((state[4, 4] << np.uint64(7)) | (state[4, 4] >> np.uint64(57))) ^ \
+                      (state[0, 4]) ^ \
+                      (state[0, 4] >> np.uint64(3))
         return state
 
-    @staticmethod
-    def _kravatte_roll_expand(input_array):
+    def _kravatte_roll_expand(self, input_array):
         """
         Kravatte defined roll function for expansion side of Farfalle PRF
 
@@ -365,26 +386,10 @@ class Kravatte(object):
         Return:
             numpy array: Keccak compatible state array: 200-byte as 5x5 64-bit lanes
         """
-        state = np.copy(input_array)
-        tmp_plane_3 = state[0:5, 3]
-        tmp_plane_4 = state[0:5, 4]
-
-        tmp_plane_3[0] = tmp_plane_3[1]
-        tmp_plane_3[1] = tmp_plane_3[2]
-        tmp_plane_3[2] = tmp_plane_3[3]
-        tmp_plane_3[3] = tmp_plane_3[4]
-        tmp_plane_3[4] = tmp_plane_4[0]
-
-        tmp_plane_4[0] = tmp_plane_4[1]
-        tmp_plane_4[1] = tmp_plane_4[2]
-        tmp_plane_4[2] = tmp_plane_4[3]
-        tmp_plane_4[3] = tmp_plane_4[4]
-
-        rotate_lane_7 = ((input_array[0][3] << np.uint64(7)) | (input_array[0][3] >> np.uint64(57)))
-        rotate_lane_18 = ((input_array[1][3] << np.uint64(18)) | (input_array[1][3] >> np.uint64(46)))
-        tmp_plane_4[4] = rotate_lane_7 ^ rotate_lane_18 ^ ((input_array[1][3] >> np.uint64(1)) & input_array[2][3])
-        state[0:5, 3] = tmp_plane_3
-        state[0:5, 4] = tmp_plane_4
+        state = input_array[self.EXPAND_ROW_REORDER, self.EXPAND_COLUMN_REORDER]
+        state[4, 4] = ((input_array[0, 3] << np.uint64(7)) | (input_array[0, 3] >> np.uint64(57))) ^ \
+                      ((input_array[1, 3] << np.uint64(18)) | (input_array[1, 3] >> np.uint64(46))) ^ \
+                      ((input_array[1, 3] >> np.uint64(1)) & input_array[2, 3])
         return state
 
     @staticmethod
