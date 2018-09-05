@@ -456,6 +456,7 @@ def mac(key: bytes, message: bytes, output_size: int, workers: int=None, mp_inpu
     kravatte_mac_gen = Kravatte(key, workers=workers, mp_input=mp_input, mp_output=mp_output)
     kravatte_mac_gen.collect_message(message)
     kravatte_mac_gen.generate_digest(output_size)
+    kravatte_mac_gen.scrub()
     return kravatte_mac_gen.digest
 
 
@@ -494,6 +495,7 @@ def siv_wrap(key: bytes, message: bytes, metadata: bytes, tag_size: int=32, work
     kravatte_siv_wrap.collect_message(siv_tag)
     kravatte_siv_wrap.generate_digest(len(message))
     ciphertext = bytes([p_text ^ key_stream for p_text, key_stream in zip(message, kravatte_siv_wrap.digest)])
+    kravatte_siv_wrap.scrub()
     return ciphertext, siv_tag
 
 
@@ -535,6 +537,7 @@ def siv_unwrap(key: bytes, ciphertext: bytes, siv_tag: bytes, metadata: bytes, w
 
     # Check if tag matches provided tag matches reconstituted tag
     valid_tag = kravatte_siv_unwrap.compare_bytes(siv_tag, generated_tag)
+    kravatte_siv_unwrap.scrub()
     return siv_plaintext, valid_tag
 
 
