@@ -82,6 +82,12 @@ state to its initialized value. Alternatively, the user may change to a
 new secret key with the ``update_key`` method to reinitialize the key
 state used at the start of message absorption.
 
+When a Kravatte object has reached the end of its usable lifetime, the ``scrub`` method
+can be used to try and cleanup interim state and key data in resident memory. This method is executed by default
+on the standalone functions ``mac``, ``siv_wrap``, ``siv_unwrap``, and is available in all Kravatte derived classes.
+*NOTE* This method only clears the sensitive attributes ``collector``, ``kra_key``, and ``roll_key`` and shouldn't be
+considered applicable when using the multi-process accelerated mode.
+
 MAC
 ---
 
@@ -347,10 +353,20 @@ Multi-process mode can be explicitly disabled by setting workers to ``None``:
 
 .. code:: python
     
-    In [5]: my_psrng = KravatteOracle(my_seed, my_key, workers=None)
+    In [6]: my_psrng = KravatteOracle(my_seed, my_key, workers=None)
 
 There is a non-trivial performance cost associated with generating new Python processes. For small,
 generally < 100KB, inputs and outputs, it can be faster to use the single process variant.
+
+For asymmetrically sized workloads, such a generating a MAC on a multi-megabyte input and only
+generating a few dozen bytes of output, multiprocessing mode can be explicitly enabled or disabled with the
+``mp_input`` and ``mp_output`` arguments. These booleans are available for ``Kravatte`` and all derived classes/functions.
+
+.. code:: python
+
+    # Enable Multiprocessing acceleration only for processing of input bytes
+    In [7]: my_psrng = KravatteOracle(my_seed, my_key, workers=16, mp_input=True, mp_output=False)
+
 
 Testing
 -------
