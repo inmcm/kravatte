@@ -39,7 +39,7 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/inmcm/kravatte',
-    download_url='https://github.com/inmcm/kravatte/archive/1.0.0.tar.gz',
-    version='1.0.0',
+    download_url='https://github.com/inmcm/kravatte/archive/1.1.0.tar.gz',
+    version='1.1.0',
     zip_safe=False,
 )
