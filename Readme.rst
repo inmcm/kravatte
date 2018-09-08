@@ -398,3 +398,39 @@ Caveats
 If any of above are of concern, please check out the official
 `KeccakTools <https://github.com/gvanas/KeccakTools>`__ and `Keccak Code
 Package <https://github.com/gvanas/KeccakCodePackage>`__
+
+Changelog
+---------
+
+1.1.0 (2018-09-08) 
+~~~~~~~~~~~~~~~~~~
+
+- Add TravisCI Testing [Calvin McCoy]
+- Add memory scrub functionality. [Calvin McCoy]
+- Optimizations to Keccak, expand permutation, and compress permutations [Calvin McCoy]
+- Added ability to enable Multi-processing for just input or output [Calvin McCoy]
+- Fixed Typos and Added Some Extra Comments [Calvin McCoy]
+
+1.0.0 (2018-05-19)
+~~~~~~~~~~~~~~~~~~
+
+- Added Multi-processing mode [Calvin McCoy]
+- Cleanup for 1.0 release [Calvin McCoy]
+
+0.9.2 (2018-04-07)
+~~~~~~~~~~~~~~~~~~
+
+- Add KravatteOracle pseudo-random generator [Calvin McCoy]
+- Add type hinting [Calvin McCoy]
+- Fix Typos [Calvin McCoy]
+
+0.9.0 (2018-03-31)
+~~~~~~~~~~~~~~~~~~
+
+- General package cleanup and fix typos [Calvin McCoy]
+
+
+0.8.0 (2018-03-28)
+~~~~~~~~~~~~~~~~~~
+
+- Initial Commit [Calvin McCoy]
