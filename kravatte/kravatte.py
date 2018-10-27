@@ -150,13 +150,14 @@ class Kravatte(object):
             yield (np.frombuffer(kra_msg, dtype=np.uint64, count=25, offset=msg_block * self.KECCAK_BYTES).reshape([5, 5], order='F') ^ self.roll_key)
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
 
-    def _collect_message_sp(self, message: bytes, append_bit: int=None) -> None:
+    def _collect_message_sp(self, message: bytes, append_bits: int=0, append_bit_count: int=0) -> None:
         """
         Pad and Process Blocks of Message into Kravatte collector state
 
         Inputs:
             message (bytes): arbitrary number of bytes to be padded into Keccak blocks and absorbed into the collector
-            append_bit (int): Either 1 or 0 to append to the message before padding. Required for more advanced Kravatte modes.
+            append_bits (int): bits to append to the message before padding. Required for more advanced Kravatte modes.
+            append_bit_count (int): number of bits to append
         """
         if self.digest_active:
             self.reset_state()
@@ -168,7 +169,7 @@ class Kravatte(object):
 
         # Pad Message
         msg_len = len(message)
-        kra_msg = self._pad_10_append(message, msg_len + (self.KECCAK_BYTES - (msg_len % self.KECCAK_BYTES)), append_bit)
+        kra_msg = self._pad_10_append(message, msg_len + (self.KECCAK_BYTES - (msg_len % self.KECCAK_BYTES)), append_bits, append_bit_count)
         absorb_steps = len(kra_msg) // self.KECCAK_BYTES
 
         # Absorb into Collector
@@ -178,13 +179,14 @@ class Kravatte(object):
             self.roll_key = self._kravatte_roll_compress(self.roll_key)
             self.collector = self.collector ^ self._keccak(m_k)
 
-    def _collect_message_mp(self, message: bytes, append_bit: int=None) -> None:
+    def _collect_message_mp(self, message: bytes, append_bits: int=0, append_bit_count: int=0) -> None:
         """
         Pad and Process Blocks of Message into Kravatte collector state - Multi-process Aware Variant
 
         Inputs:
             message (bytes): arbitrary number of bytes to be padded into Keccak blocks and absorbed into the collector
-            append_bit (int): Either 1 or 0 to append to the message before padding. Required for more advanced Kravatte modes.
+            append_bits (int): bits to append to the message before padding. Required for more advanced Kravatte modes.
+            append_bit_count (int): number of bits to append
         """
         if self.digest_active:
             self.reset_state()
@@ -196,7 +198,7 @@ class Kravatte(object):
 
         # Pad Message
         msg_len = len(message)
-        kra_msg = self._pad_10_append(message, msg_len + (self.KECCAK_BYTES - (msg_len % self.KECCAK_BYTES)), append_bit)
+        kra_msg = self._pad_10_append(message, msg_len + (self.KECCAK_BYTES - (msg_len % self.KECCAK_BYTES)), append_bits, append_bit_count)
         absorb_steps = len(kra_msg) // self.KECCAK_BYTES
         workload = 1 if (absorb_steps // self.workers) == 0 else (absorb_steps // self.workers)
         with Pool(processes=self.workers) as kravatte_pool:
@@ -393,15 +395,16 @@ class Kravatte(object):
         return state
 
     @staticmethod
-    def _pad_10_append(input_bytes: bytes, desired_length: int, append_bit: int=None) -> bytes:
+    def _pad_10_append(input_bytes: bytes, desired_length: int, append_bits: int=0, append_bit_count: int=0) -> bytes:
         """
         Farfalle defined padding function. Limited to byte divisible inputs only
 
         Inputs:
             input_bytes (bytes): Collection of bytes
             desired_length (int): Number of bytes to pad input len out to
-            append_bit (int): a single bit represented by 1 or 0 to be inserted before the padding
-                              starts. Allows "appending" a bit as required by several Kravatte modes
+            append_bits (int): one or more bits to be inserted before the padding starts. Allows 
+                              "appending" bits as required by several Kravatte modes
+            append_bit_count (int): number of bits to append
         Return:
             bytes: input bytes with padding applied
         """
@@ -409,10 +412,7 @@ class Kravatte(object):
         if start_len == desired_length:
             return input_bytes
 
-        if append_bit is not None:
-            head_pad_byte = b'\x03' if append_bit == 1 else b'\x02'
-        else:
-            head_pad_byte = b'\x01'
+        head_pad_byte = bytes([(0b01 << append_bit_count) | (((2**append_bit_count) - 1) & append_bits)])
 
         pad_len = desired_length - (start_len % desired_length)
         padded_bytes = input_bytes + head_pad_byte + (b'\x00' * (pad_len - 1))
@@ -676,7 +676,7 @@ class KravatteSAE(Kravatte):
         # Pad Message with a single bit and then
         start_len = len(message)
         padded_len = start_len + (self.KECCAK_BYTES - (start_len % self.KECCAK_BYTES))
-        padded_bytes = self._pad_10_append(message, padded_len, pad_bit)
+        padded_bytes = self._pad_10_append(message, padded_len, pad_bit, 1)
         absorb_steps = len(padded_bytes) // self.KECCAK_BYTES
 
         # Absorb into Collector
@@ -738,25 +738,25 @@ class KravatteWBC(Kravatte):
         R = message[self.size_L:]
 
         # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bits of R
-        self.collect_message(L, append_bit=0)
+        self.collect_message(L, append_bits=0b0, append_bit_count=1)
         self.generate_digest(min(self.KECCAK_BYTES, self.size_R), short_kravatte=True)
         extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
         R = bytes([p_text ^ key_stream for p_text, key_stream in zip(R, extended_digest)])
 
         # L ← L + GK (R||1 ◦ W)
         self.collect_message(self.tweak)
-        self.collect_message(R, append_bit=1)
+        self.collect_message(R, append_bits=0b1, append_bit_count=1)
         self.generate_digest(self.size_L)
         L = bytes([p_text ^ key_stream for p_text, key_stream in zip(L, self.digest)])
 
         # R ← R + GK (L||0 ◦ W)
         self.collect_message(self.tweak)
-        self.collect_message(L, append_bit=0)
+        self.collect_message(L, append_bits=0b0, append_bit_count=1)
         self.generate_digest(self.size_R)
         R = bytes([p_text ^ key_stream for p_text, key_stream in zip(R, self.digest)])
 
         # L0 ← L0 + HK(R||1), with L0 the first min(b, |L|) bits of L
-        self.collect_message(R, append_bit=1)
+        self.collect_message(R, append_bits=0b1, append_bit_count=1)
         self.generate_digest(min(self.KECCAK_BYTES, self.size_L), short_kravatte=True)
         extended_digest = self.digest + ((self.size_L - len(self.digest)) * b'\x00')
         L = bytes([p_text ^ key_stream for p_text, key_stream in zip(L, extended_digest)])
@@ -776,25 +776,25 @@ class KravatteWBC(Kravatte):
         R = ciphertext[self.size_L:]
 
         # L0 ← L0 + HK(R||1), with L0 the first min(b, |L|) bits of L
-        self.collect_message(R, append_bit=1)
+        self.collect_message(R, append_bits=0b1, append_bit_count=1)
         self.generate_digest(min(self.KECCAK_BYTES, self.size_L), short_kravatte=True)
         extended_digest = self.digest + ((self.size_L - len(self.digest)) * b'\x00')
         L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, extended_digest)])
 
         # R ← R + GK (L||0 ◦ W)
         self.collect_message(self.tweak)
-        self.collect_message(L, append_bit=0)
+        self.collect_message(L, append_bits=0b0, append_bit_count=1)
         self.generate_digest(self.size_R)
         R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, self.digest)])
 
         # L ← L + GK (R||1 ◦ W)
         self.collect_message(self.tweak)
-        self.collect_message(R, append_bit=1)
+        self.collect_message(R, append_bits=0b1, append_bit_count=1)
         self.generate_digest(self.size_L)
         L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, self.digest)])
 
         # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bits of R
-        self.collect_message(L, append_bit=0)
+        self.collect_message(L, append_bits=0b0, append_bit_count=1)
         self.generate_digest(min(self.KECCAK_BYTES, self.size_R), short_kravatte=True)
         extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
         R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, extended_digest)])
@@ -857,14 +857,14 @@ class KravatteWBC_AE(KravatteWBC):
         self.tweak = metadata
 
         # L0 ← L0 + HK(R||1), with L0 the first min(b, |L|) bits of L
-        self.collect_message(R, append_bit=1)
+        self.collect_message(R, append_bits=0b1, append_bit_count=1)
         self.generate_digest(min(self.KECCAK_BYTES, self.size_L), short_kravatte=True)
         extended_digest = self.digest + ((self.size_L - len(self.digest)) * b'\x00')
         L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, extended_digest)])
 
         # R ← R + GK (L||0 ◦ A)
         self.collect_message(self.tweak)
-        self.collect_message(L, append_bit=0)
+        self.collect_message(L, append_bits=0b0, append_bit_count=1)
         self.generate_digest(self.size_R)
         R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, self.digest)])
 
@@ -875,12 +875,12 @@ class KravatteWBC_AE(KravatteWBC):
 
             # L ← L + GK (R||1 ◦ A)
             self.collect_message(self.tweak)
-            self.collect_message(R, append_bit=1)
+            self.collect_message(R, append_bits=0b1, append_bit_count=1)
             self.generate_digest(self.size_L)
             L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, self.digest)])
 
             # R0 ← R0 + HK(L||0), with R0 the first b bytes of R
-            self.collect_message(L, append_bit=0)
+            self.collect_message(L, append_bits=0b0, append_bit_count=1)
             self.generate_digest(self.KECCAK_BYTES, short_kravatte=True)
             extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
             R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, extended_digest)])
@@ -888,12 +888,12 @@ class KravatteWBC_AE(KravatteWBC):
         else:
             # L ← L + GK (R||1 ◦ A)
             self.collect_message(self.tweak)
-            self.collect_message(R, append_bit=1)
+            self.collect_message(R, append_bits=0b1, append_bit_count=1)
             self.generate_digest(self.size_L)
             L = bytes([c_text ^ key_stream for c_text, key_stream in zip(L, self.digest)])
 
             # R0 ← R0 + HK(L||0), with R0 the first min(b, |R|) bytes of R
-            self.collect_message(L, append_bit=0)
+            self.collect_message(L, append_bits=0b0, append_bit_count=1)
             self.generate_digest(min(self.KECCAK_BYTES, self.size_R), short_kravatte=True)
             extended_digest = self.digest + ((self.size_R - len(self.digest)) * b'\x00')
             R = bytes([c_text ^ key_stream for c_text, key_stream in zip(R, extended_digest)])
