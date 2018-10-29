@@ -1,6 +1,6 @@
 import hashlib
 import numpy as np
-from kravatte import mac, siv_wrap, siv_unwrap, Kravatte, KravatteSAE, KravatteWBC, KravatteWBC_AE, KravatteOracle
+from kravatte import mac, siv_wrap, siv_unwrap, Kravatte, KravatteSAE, KravatteSANE, KravatteWBC, KravatteWBC_AE, KravatteOracle
 
 
 # Official Test Vectors
@@ -5091,29 +5091,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
@@ -5196,29 +5196,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
@@ -5301,29 +5301,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
@@ -5345,29 +5345,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
@@ -5390,29 +5390,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
@@ -5435,29 +5435,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
         
@@ -5480,29 +5480,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
@@ -5525,29 +5525,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
@@ -5570,29 +5570,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
@@ -5615,29 +5615,29 @@ class TestOfficialTestVectors:
         krav_sae_decrypt = KravatteSAE(my_nonce, my_key, workers=test_workers)
 
         # Encryption Message 1
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[0]
         assert real_tag == output_tags[0]
         # Decrypt Message 1
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 2
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[1]
         assert real_tag == output_tags[1]
         # Decrypt Message 2
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
         # Encryption Message 3
-        real_c_text, real_tag = krav_sae_encrypt.sae_wrap(my_message, my_metadata)
+        real_c_text, real_tag = krav_sae_encrypt.wrap(my_message, my_metadata)
         assert real_c_text == output_ciphertexts[2]
         assert real_tag == output_tags[2]
         # Decrypt Message 3
-        real_p_text, tag_valid = krav_sae_decrypt.sae_unwrap(real_c_text, my_metadata, real_tag)
+        real_p_text, tag_valid = krav_sae_decrypt.unwrap(real_c_text, my_metadata, real_tag)
         assert real_p_text == my_message
         assert tag_valid
 
