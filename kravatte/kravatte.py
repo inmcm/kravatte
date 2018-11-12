@@ -687,7 +687,14 @@ class KravatteSAE(Kravatte):
             self.collector = self.collector ^ self._keccak(m_k)
 
 
-class KravatteSANE(KravatteSAE):
+class KravatteSANE(Kravatte):
+    """
+    An authenticated encryption mode designed to track a session consisting of a series of messages
+    and an initialization nonce. A replacement for KravatteSAE
+    """
+    TAG_SIZE = 16
+    OFFSET = TAG_SIZE
+
     """
     An authenticated encryption mode designed to track a session consisting of a series of messages
     and an initialization nonce. A replacement for KravatteSAE
@@ -704,7 +711,8 @@ class KravatteSANE(KravatteSAE):
             mp_input (bool): Enable multi-processing for calculations on input data
             mp_output (bool): Enable multi-processing for calculations on output data
         """
-        super(KravatteSANE, self).__init__(nonce, key, workers, mp_input, mp_output)
+        super(KravatteSANE, self).__init__(key, workers, mp_input, mp_output)
+        self.initialize_history(nonce)
 
     def initialize_history(self, nonce: bytes) -> None:
         """
