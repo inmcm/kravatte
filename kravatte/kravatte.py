@@ -566,7 +566,7 @@ class KravatteSAE(Kravatte):
 
     def initialize_history(self, nonce: bytes) -> None:
         """
-        Initialize session history by storing Kecceck collector state and current internal key.
+        Initialize session history by storing Keccak collector state and current internal key
 
         Args:
             key (bytes): user provided bytes to be padded (if necessary) and computed into Kravatte base key
