@@ -689,8 +689,8 @@ class KravatteSAE(Kravatte):
 
 class KravatteSANE(Kravatte):
     """
-    An authenticated encryption mode designed to track a session consisting of a series of messages
-    and an initialization nonce. A replacement for KravatteSAE
+    An authenticated encryption mode designed to track a session consisting of a series of messages,
+    metadata, and an initialization nonce. A replacement for KravatteSAE
     """
     TAG_SIZE = 16
     OFFSET = TAG_SIZE
@@ -712,15 +712,20 @@ class KravatteSANE(Kravatte):
             mp_output (bool): Enable multi-processing for calculations on output data
         """
         super(KravatteSANE, self).__init__(key, workers, mp_input, mp_output)
-        self.initialize_history(nonce)
+        self.initialize_history(nonce, False)
 
-    def initialize_history(self, nonce: bytes) -> None:
+    def initialize_history(self, nonce: bytes, reinitialize: bool=True) -> None:
         """
-        Initialize session history by storing Kecceck collector state and current internal key.
+        Initialize session history. Session history is stored pre-compressed within the Keccak collector
+        and current matching internal key state. Kravatte-SANE session history starts with the user
+        provided nonce.
 
         Args:
-            key (bytes): user provided bytes to be padded (if necessary) and computed into Kravatte base key
+            nonce (bytes): user provided bytes to initialize the session history
+            reinitialize (bool): perform a full reset of the Keccak state when manually restarting the history log
         """
+        if reinitialize:
+            self.reset_state()
         self.collect_message(nonce)
         self.history_collector = np.copy(self.collector)
         self.history_key = np.copy(self.roll_key)
@@ -750,16 +755,15 @@ class KravatteSANE(Kravatte):
         self.generate_digest(len(plaintext) + self.OFFSET)
         ciphertext = bytes([p_text ^ key_stream for p_text, key_stream in zip(plaintext, self.digest[self.OFFSET:])])
 
-        # Update History
+        # Restore/Update History States if required
+        self._restore_history()
         if len(metadata) > 0 or len(plaintext) == 0:
-            self._append_to_history(metadata, 0)
-
+            self._append_to_history(metadata, (self.e_attr << 1) | 0, 2)
         if len(plaintext) > 0:
-            self._append_to_history(ciphertext, 1)
+            self._append_to_history(ciphertext, (self.e_attr << 1) | 1, 2)
 
-        self.history_collector = np.copy(self.collector)
+        # Increment e toggler attribute
         self.e_attr ^= 1
-        self.history_key = np.copy(self.roll_key)
 
         # Generate Tag
         self.generate_digest(self.TAG_SIZE)
@@ -769,7 +773,7 @@ class KravatteSANE(Kravatte):
     def unwrap(self, ciphertext: bytes, metadata: bytes, validation_tag: bytes) -> KravatteValidatedOutput:
         """
         Decrypt an arbitrary ciphertext message using the included metadata as part of an on-going
-        session. Creates authentication tag for validation during decryption.
+        session. Validates decryption based on the provided authentication tag.
 
         Args:
             ciphertext (bytes): user ciphertext of arbitrary length
@@ -790,16 +794,15 @@ class KravatteSANE(Kravatte):
         self.generate_digest(len(ciphertext) + self.OFFSET)
         plaintext = bytes([p_text ^ key_stream for p_text, key_stream in zip(ciphertext, self.digest[self.OFFSET:])])
 
-        # Update History
+        # Restore/Update History States if required
+        self._restore_history()
         if len(metadata) > 0 or len(ciphertext) == 0:
-            self._append_to_history(metadata, 0)
-
+            self._append_to_history(metadata, (self.e_attr << 1) | 0, 2)
         if len(ciphertext) > 0:
-            self._append_to_history(ciphertext, 1)
+            self._append_to_history(ciphertext, (self.e_attr << 1) | 1, 2)
 
-        self.history_collector = np.copy(self.collector)
+        # Increment e toggler attribute
         self.e_attr ^= 1
-        self.history_key = np.copy(self.roll_key)
 
         # Generate Tag
         self.generate_digest(self.TAG_SIZE)
@@ -810,34 +813,30 @@ class KravatteSANE(Kravatte):
 
         return plaintext, valid_tag
 
-    def _append_to_history(self, message: bytes, pad_bit: int) -> None:
+    def _append_to_history(self, message: bytes, pad_bits: int, pad_size: int) -> None:
         """
         Update history collector state with provided message.
 
         Args:
             message (bytes): arbitrary number of bytes to be padded into Keccak blocks and absorbed into the collector
-            pad_bit (int): Either 1 or 0 to append to the end of the regular message before padding
+            pad_bits (int): Up to 6 additional bits added to the end of the regular message before padding
+            pad_size (int): Number of bits to append
         """
-        if self.digest_active:
-            self.collector = np.copy(self.history_collector)
-            self.roll_key = np.copy(self.history_key)
-            self.digest = bytearray(b'')
-            self.digest_active = False
+        self.collect_message(message, pad_bits, pad_size)
+        self.history_collector = np.copy(self.collector)
+        self.history_key = np.copy(self.roll_key)
 
-        self.roll_key = self._kravatte_roll_compress(self.roll_key)
+    def _restore_history(self) -> None:
+        """
+        Restore the internal kravatte state to the previously saved history state
 
-        # Pad Message with a single bit and then
-        start_len = len(message)
-        padded_len = start_len + (self.KECCAK_BYTES - (start_len % self.KECCAK_BYTES))
-        padded_bytes = self._pad_10_append(message, padded_len, (self.e_attr << 1) | pad_bit, 2)
-        absorb_steps = len(padded_bytes) // self.KECCAK_BYTES
-
-        # Absorb into Collector
-        for msg_block in range(absorb_steps):
-            m = np.frombuffer(padded_bytes, dtype=np.uint64, count=25, offset=msg_block * self.KECCAK_BYTES).reshape([5, 5], order='F')
-            m_k = m ^ self.roll_key
-            self.roll_key = self._kravatte_roll_compress(self.roll_key)
-            self.collector = self.collector ^ self._keccak(m_k)
+        Args:
+            None
+        """
+        self.collector = np.copy(self.history_collector)
+        self.roll_key = np.copy(self.history_key)
+        self.digest = bytearray(b'')
+        self.digest_active = False
 
 
 class KravatteSANSE(Kravatte):
