@@ -19,8 +19,12 @@ computational library is a natural fit to quickly manipulate such a
 structure and thus is a hard requirement.
 
 This implementation reflects the updated, more secure Kravatte
-**Achouffe** released in late 2017. The older “Kravatte 6644” logic is
+**Achouffe** released in late 2017. The older ``Kravatte 6644`` logic is
 available within this repo as well.
+
+Also supported are the `Kravatte-SANE and Kravatte-SANSE  <https://eprint.iacr.org/2018/1012.pdf>`__
+session based modes. These modes replace the deprecated Kravatte-SAE and Kravatte-SIV modes and 
+utilizes the ``Deck-SANE`` and ``Deck-SANSE`` modes described in the `Xoodoo Cookbook <https://eprint.iacr.org/2018/767.pdf>`__.
 
 Installation
 ------------
@@ -107,100 +111,50 @@ act as a message authentication code. The ``mac`` does this in a single step:
     In [7] hexlify(g)
     Out[7] b'24f61fc5fd38fef7f3d799ed72b24578c4479e1c035c70d8bc55ce23d74124255d5e8a0c5dd33aa36d5289f1e4e995a19be804d97bb338fa875e01e3c2d2dd51'
 
-Kravatte-SIV
-------------
 
-``Kravatte-SIV`` mode is a method of authenticated encryption with
-associated metadata (AEAD) that allows for encrypting a provided
-plaintext with a secret shared key and an arbitrary metadata value.
-Encryption generates an equal length ciphertext and fixed length tag
-that can be used to validate the plaintext at decryption. Metadata
-values can be shared for different key/message combinations with
-understanding that the more a value is used, the greater the chance of a
-tag collision. 
+Kravatte-SANE
+-------------
 
-Encrypt
-~~~~~~~
-
-.. code:: python
-
-    In [1] from kravatte import siv_wrap, siv_unwrap
-    In [2] from binascii import hexlify
-    In [3] from datetime import datetime
-    In [4] message = b'Attack at Dawn!'
-    In [5] key = b'something_secret'
-    In [6] metadata = str(datetime.now()).encode()
-    In [7] ciphertext, tag = siv_wrap(key, message, metadata)
-    In [8] hexlify(ciphertext)
-    Out[8] b'79f7bd89a7cb7af1892ea51c531f4b'
-    In [9] hexlify(tag)
-    Out[9] b'37c7e11f0c9c744e7c113590fdfba7737cb38b629ef6901df22d6994340e89eas'
-
-Decrypt
-~~~~~~~
-
-.. code:: python
-
-    In [10] plaintext, tag_valid = siv_unwrap(key, ciphertext, tag, metadata)
-    In [11] plaintext
-    Out[11] b'Attack at Dawn!'
-    In [12] tag_valid
-    Out[12] True
-
-Kravatte-SAE
-------------
-
-``Kravatte-SAE`` mode is a session based method of AEAD. Given a random
+``Kravatte-SANE`` mode is a session based method of AEAD. Given a random
 nonce and secret key, this mode encrypts a sequence of plaintext
-messages and/or metadata into equal size ciphertexts and a validation
-tag. The sequence of plaintext/metadata is tracked as a history that
+messages and/or metadata into appropriately sized ciphertexts and a validation
+tags. The sequence of plaintext/metadata is tracked as a history that
 builds a chain of authentication from message to message and requires
 all generated ciphertexts to be processed to fully decrypt and verify.
 
-A separate ``KravatteSAE`` class is provided that adds the history
-tracking for each encryption operation done via the ``sae_wrap`` method.
+A separate ``KravatteSANE`` class is provided that adds the history
+tracking for each encryption operation done via the ``wrap`` method.
 
 Encrypt
 ~~~~~~~
 
 .. code:: python
 
-    In [1]: from kravatte import KravatteSAE
-    In [2]: from datetime import datetime
-    In [3]: from binascii import hexlify
-    In [4]: message_1 = b'Directions to my house:'
-    In [5]: metadata_1 = str(datetime.now()).encode()
-    In [6]: message_2 = b'Turn right on main street'
-    In [7]: metadata_2 = str(datetime.now()).encode()
-    In [8]: message_3 = b'Continue straight for 3500 miles'
-    In [9]: metadata_3 = str(datetime.now()).encode()
-    In [10]: message_4 = b'You have arrived at your destination'
-    In [11]: metadata_4 = str(datetime.now()).encode()
-    In [12]: nonce = b'a well chosen random number'
-    In [13]: key = b'an even better random number'
-    In [14]: KravSAE_wrapper = KravatteSAE(nonce, key)
-    In [15]: ciphertext_1, tag_1 = KravSAE_wrapper.sae_wrap(message_1, metadata_1)
-    In [16]: hexlify(ciphertext_1)
-    Out[16]: b'7b8932a1c3673fcfe752631ef5b867843951514335de61'
+    In [1]: from os import urandom
+    In [2]: from binascii import hexlify
+    In [3]: from time import monotonic
+    In [4]: my_nonce=urandom(32)
+    In [5]: hexlify(my_nonce)
+    Out[5]: b'41c48803e34eefd9ac1d39d3412d3e32592173fbcdd1b60d85dc177ae7156733'
+    In [6]: message1=b'Nice List:'
+    In [7]: meta1=str(monotonic()).encode()
+    In [8]: message2=b'Alice,Bob'
+    In [9]: meta2=str(monotonic()).encode()
+    In [10]: message3=b'Naughty List:'
+    In [11]: meta3=str(monotonic()).encode()
+    In [12]: message4=b'Chuck, Eve'
+    In [13]: meta4=str(monotonic()).encode()
+    In [14]: my_sane = KravatteSANE(my_nonce,my_key)
+    In [15]: ctext_1, tag_1 = my_sane.wrap(message1, meta1)
+    In [16]: hexlify(ctext_1)
+    Out[16]: b'4b42fef9cb5a6ce69d78'
     In [17]: hexlify(tag_1)
-    Out[17]: b'3384885ca293925cc65a03fa10790420'
-    In [18]: ciphertext_2, tag_2 = KravSAE_wrapper.sae_wrap(message_2, metadata_2)
-    In [19]: hexlify(ciphertext_2)
-    Out[19]: b'ab48882d4339c6def9d5d06f608db5318a87a417566c0b20bd'
-    In [20]: hexlify(tag_2)
-    Out[20]: b'347f5a152dcc9ccc3c19fa936067c3d2'
-    In [21]: ciphertext_3, tag_3 = KravSAE_wrapper.sae_wrap(message_3, metadata_3)
-    In [22]: hexlify(ciphertext_3)
-    Out[22]: b'bc461f40db74705c10b1400b6a9967dd7164cbf774c196d5b649faf2bd792339'
-    In [23]: hexlify(tag_3)
-    Out[23]: b'6ba2faee4d2aa5654a054222a049d926'
-    In [24]: ciphertext_4, tag_4 = KravSAE_wrapper.sae_wrap(message_4, metadata_4)
-    In [25]: hexlify(ciphertext_4)
-    Out[25]: b'1f451f51d9882f9f7674c37dace4036efd9efe39d6b58ccdf6b012ef988e4e1f2617479f'
-    In [26]: hexlify(tag_4)
-    Out[26]: b'5f3511f140b4ea36412c0e4b22d1c218'
+    Out[17]: b'169e7eb0f63cebd70efb779ff45a67f0'
+    In [18]: ctext_2, tag_2 = my_sane.wrap(message2, meta2)
+    In [19]: ctext_3, tag_3 = my_sane.wrap(message3, meta3)
+    In [20]: ctext_4, tag_4 = my_sane.wrap(message4, meta4)
 
-For decryption and validation, the ``sae_unwrap`` method accepts the
+For decryption and validation, the ``unwrap`` method accepts the
 ciphertext, original metadata, and validation tag to not only decrypt
 the plaintext, but return a boolean if the decrypted plaintext is valid
 within the chain of messages.
@@ -210,27 +164,83 @@ Decrypt
 
 .. code:: python
 
-    In [27]: KravSAE_unwrapper = KravatteSAE(nonce, key)
-    In [28]: plaintext_1, check_tag_1 = KravSAE_unwrapper.sae_unwrap(ciphertext_1, metadata_1, tag_1)
-    In [29]: plaintext_1
-    Out[29]: b'Directions to my house:'
-    In [30]: check_tag_1
+    In [21]: decrypt_sane = KravatteSANE(my_nonce,my_key)
+    In [22]: ptext_1, tag_valid1 = decrypt_sane.unwrap(ctext_1, meta1, tag_1)
+    In [23]: ptext_1
+    Out[23]: b'Nice List:'
+    In [24]: tag_valid1
+    Out[24]: True
+    In [25]: ptext_2, tag_valid2 = decrypt_sane.unwrap(ctext_2, meta2, tag_2)
+    In [26]: tag_valid2
+    Out[26]: True
+    In [27]: ptext_2
+    Out[27]: b'Alice,Bob'
+    In [28]: ptext_3, tag_valid3 = decrypt_sane.unwrap(ctext_3, meta3, tag_3)
+    In [29]: ptext_3
+    Out[29]: b'Naughty List:'
+    In [30]: tag_valid3
     Out[30]: True
-    In [31]: plaintext_2, check_tag_2 = KravSAE_unwrapper.sae_unwrap(ciphertext_2, metadata_2, tag_2)
-    In [32]: plaintext_2
-    Out[32]: b'Turn right on main street'
-    In [33]: check_tag_2
+    In [31]: ptext_4, tag_valid4 = decrypt_sane.unwrap(ctext_4, meta4, tag_4)
+    In [32]: ptext_4
+    Out[32]: b'Chuck, Eve'
+    In [33]: tag_valid4
     Out[33]: True
-    In [34]: plaintext_3, check_tag_3 = KravSAE_unwrapper.sae_unwrap(ciphertext_3, metadata_3, tag_3)
-    In [35]: plaintext_3
-    Out[35]: b'Continue straight for 3500 miles'
-    In [36]: check_tag_3
-    Out[36]: True
-    In [37]: plaintext_4, check_tag_4 = KravSAE_unwrapper.sae_unwrap(ciphertext_4, metadata_4, tag_4)
-    In [38]: plaintext_4
-    Out[38]: b'You have arrived at your destination'
-    In [39]: check_tag_4
-    Out[39]: True
+
+
+Kravatte-SANSE
+--------------
+
+``Kravatte-SANSE`` mode is session based method of authenticated encryption with
+associated metadata (AEAD) that allows for encrypting a provided
+plaintext with a secret shared key and an arbitrary metadata value.
+This mode does not require a nonce as it operates with a 
+`Synthetic Initialization Vector (SIV) <https://tools.ietf.org/html/rfc5297>`__
+Encryption generates an equal length ciphertext and fixed length tag
+that can be used to validate the plaintext at decryption. Metadata
+values can be shared for different key/message combinations with
+understanding that the more a value is used, the greater the chance of a
+tag collision. This mode replaces ``Kravatte-SIV``
+
+A ``KravatteSANSE`` class is provided that adds the history
+tracking for each encryption operation done via the ``wrap`` method.
+
+Encrypt
+~~~~~~~
+
+.. code:: python
+
+    In [1]: from binascii import hexlify
+    In [2]: from kravatte import KravatteSANSE
+    In [3]: my_message = b'And yet it moves'
+    In [4]: my_key = b'name of childhood pet'
+    In [5]: metadata_1 = b'1024x768'
+    In [6]: another_message = b'The present is theirs; the future, for which I really worked, is mine.'
+    In [7]: metadata_2 = b'7680x4320'
+    In [8]: my_sanse = KravatteSANSE(my_key)
+    In [9]: ctext_1, tag_1 = my_sanse.wrap(my_message, metadata_1)
+    In [10]: hexlify(ctext_1)
+    Out[10]: b'79e4773536a2ac4b4ec9e93583a817a5'
+    In [11]: hexlify(tag_1)
+    Out[11]: b'eaa50cb8a02e3238aa8dd5d1186ec0a87ebf6fe71b6fd89bea20b2001fef6810'
+    In [12]: ctext_2, tag_2 = my_sanse.wrap(another_message, metadata_2)
+
+Decrypt
+~~~~~~~
+
+.. code:: python
+
+    In [13]: decrypt_sanse = KravatteSANSE(my_key)
+    In [14]: ptext_1, tag_valid_1 = decrypt_sanse.unwrap(ctext_1, metadata_1, tag_1)
+    In [15]: ptext_1
+    Out[15]: b'And yet it moves'
+    In [16]: tag_valid_1
+    Out[16]: True
+    In [17]: ptext_2, tag_valid_2 = decrypt_sanse.unwrap(ctext_2, metadata_2, tag_2)
+    In [18]: ptext_2
+    Out[18]: b'The present is theirs; the future, for which I really worked, is mine.'
+    In [19]: tag_valid_2
+    Out[19]: True
+
 
 KravatteWBC
 -----------
@@ -323,6 +333,132 @@ Re-seed Generator
     In [10]: random_bytes = my_psrng.random(18)
     In [11]: hexlify(random_bytes)
     Out[11]: b'3e108c3f627f561943893b6a3184e5b76472'
+
+Kravatte-SIV (Deprecated)
+-------------------------
+
+``Kravatte-SIV`` mode is a method of authenticated encryption with
+associated metadata (AEAD) that allows for encrypting a provided
+plaintext with a secret shared key and an arbitrary metadata value.
+Encryption generates an equal length ciphertext and fixed length tag
+that can be used to validate the plaintext at decryption. Metadata
+values can be shared for different key/message combinations with
+understanding that the more a value is used, the greater the chance of a
+tag collision. **Deprecated in favor of Kravatte-SANSE**
+
+Encrypt
+~~~~~~~
+
+.. code:: python
+
+    In [1] from kravatte import siv_wrap, siv_unwrap
+    In [2] from binascii import hexlify
+    In [3] from datetime import datetime
+    In [4] message = b'Attack at Dawn!'
+    In [5] key = b'something_secret'
+    In [6] metadata = str(datetime.now()).encode()
+    In [7] ciphertext, tag = siv_wrap(key, message, metadata)
+    In [8] hexlify(ciphertext)
+    Out[8] b'79f7bd89a7cb7af1892ea51c531f4b'
+    In [9] hexlify(tag)
+    Out[9] b'37c7e11f0c9c744e7c113590fdfba7737cb38b629ef6901df22d6994340e89eas'
+
+Decrypt
+~~~~~~~
+
+.. code:: python
+
+    In [10] plaintext, tag_valid = siv_unwrap(key, ciphertext, tag, metadata)
+    In [11] plaintext
+    Out[11] b'Attack at Dawn!'
+    In [12] tag_valid
+    Out[12] True
+
+Kravatte-SAE (Deprecated)
+-------------------------
+
+``Kravatte-SAE`` mode is a session based method of AEAD. Given a random
+nonce and secret key, this mode encrypts a sequence of plaintext
+messages and/or metadata into equal size ciphertexts and a validation
+tag. The sequence of plaintext/metadata is tracked as a history that
+builds a chain of authentication from message to message and requires
+all generated ciphertexts to be processed to fully decrypt and verify.
+**Deprecated in favor of Kravatte-SANE**
+
+A separate ``KravatteSAE`` class is provided that adds the history
+tracking for each encryption operation done via the ``sae_wrap`` method.
+
+Encrypt
+~~~~~~~
+
+.. code:: python
+
+    In [1]: from kravatte import KravatteSAE
+    In [2]: from datetime import datetime
+    In [3]: from binascii import hexlify
+    In [4]: message_1 = b'Directions to my house:'
+    In [5]: metadata_1 = str(datetime.now()).encode()
+    In [6]: message_2 = b'Turn right on main street'
+    In [7]: metadata_2 = str(datetime.now()).encode()
+    In [8]: message_3 = b'Continue straight for 3500 miles'
+    In [9]: metadata_3 = str(datetime.now()).encode()
+    In [10]: message_4 = b'You have arrived at your destination'
+    In [11]: metadata_4 = str(datetime.now()).encode()
+    In [12]: nonce = b'a well chosen random number'
+    In [13]: key = b'an even better random number'
+    In [14]: KravSAE_wrapper = KravatteSAE(nonce, key)
+    In [15]: ciphertext_1, tag_1 = KravSAE_wrapper.sae_wrap(message_1, metadata_1)
+    In [16]: hexlify(ciphertext_1)
+    Out[16]: b'7b8932a1c3673fcfe752631ef5b867843951514335de61'
+    In [17]: hexlify(tag_1)
+    Out[17]: b'3384885ca293925cc65a03fa10790420'
+    In [18]: ciphertext_2, tag_2 = KravSAE_wrapper.sae_wrap(message_2, metadata_2)
+    In [19]: hexlify(ciphertext_2)
+    Out[19]: b'ab48882d4339c6def9d5d06f608db5318a87a417566c0b20bd'
+    In [20]: hexlify(tag_2)
+    Out[20]: b'347f5a152dcc9ccc3c19fa936067c3d2'
+    In [21]: ciphertext_3, tag_3 = KravSAE_wrapper.sae_wrap(message_3, metadata_3)
+    In [22]: hexlify(ciphertext_3)
+    Out[22]: b'bc461f40db74705c10b1400b6a9967dd7164cbf774c196d5b649faf2bd792339'
+    In [23]: hexlify(tag_3)
+    Out[23]: b'6ba2faee4d2aa5654a054222a049d926'
+    In [24]: ciphertext_4, tag_4 = KravSAE_wrapper.sae_wrap(message_4, metadata_4)
+    In [25]: hexlify(ciphertext_4)
+    Out[25]: b'1f451f51d9882f9f7674c37dace4036efd9efe39d6b58ccdf6b012ef988e4e1f2617479f'
+    In [26]: hexlify(tag_4)
+    Out[26]: b'5f3511f140b4ea36412c0e4b22d1c218'
+
+For decryption and validation, the ``sae_unwrap`` method accepts the
+ciphertext, original metadata, and validation tag to not only decrypt
+the plaintext, but return a boolean if the decrypted plaintext is valid
+within the chain of messages.
+
+Decrypt
+~~~~~~~
+
+.. code:: python
+
+    In [27]: KravSAE_unwrapper = KravatteSAE(nonce, key)
+    In [28]: plaintext_1, check_tag_1 = KravSAE_unwrapper.sae_unwrap(ciphertext_1, metadata_1, tag_1)
+    In [29]: plaintext_1
+    Out[29]: b'Directions to my house:'
+    In [30]: check_tag_1
+    Out[30]: True
+    In [31]: plaintext_2, check_tag_2 = KravSAE_unwrapper.sae_unwrap(ciphertext_2, metadata_2, tag_2)
+    In [32]: plaintext_2
+    Out[32]: b'Turn right on main street'
+    In [33]: check_tag_2
+    Out[33]: True
+    In [34]: plaintext_3, check_tag_3 = KravSAE_unwrapper.sae_unwrap(ciphertext_3, metadata_3, tag_3)
+    In [35]: plaintext_3
+    Out[35]: b'Continue straight for 3500 miles'
+    In [36]: check_tag_3
+    Out[36]: True
+    In [37]: plaintext_4, check_tag_4 = KravSAE_unwrapper.sae_unwrap(ciphertext_4, metadata_4, tag_4)
+    In [38]: plaintext_4
+    Out[38]: b'You have arrived at your destination'
+    In [39]: check_tag_4
+    Out[39]: True
 
 
 Multi-Process Performance Mode
