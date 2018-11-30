@@ -507,12 +507,12 @@ generating a few dozen bytes of output, multiprocessing mode can be explicitly e
 Testing
 -------
 
-A full test suite is available in ``test_kravatte.py``. Assuming the ``kravatte`` module is installed, 
-tests can be invoked with pytest:
+A full test suite is available in the ``test/`` dir. Tests can be invoked with pytest:
 
 .. code:: bash
 
-    $ pytest -xvvv test_kravatte.py
+    $ cd path/to/cloned/kravatte/
+    $ pytest -xvvv
 
 The same tests are run against the standard codepath and the multiprocess code path utilizing all available
 CPU cores. Test vectors were generated using the
