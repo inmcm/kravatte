@@ -6,7 +6,8 @@ An implementation, in Python3, of the
 and associated modes based on the `Farfalle
 PRF <https://eprint.iacr.org/2016/1188.pdf>`__ system. At its core,
 Kravatte accepts a user defined secret key and a sequence of input bytes
-to generate pseudo-random output of arbitrary size.
+to generate pseudo-random output of arbitrary size. From this primitive, a 
+number of authenticated encryption modes can be built.
 
 Kravatte makes use of the
 `Keccak <https://keccak.team/files/Keccak-reference-3.0.pdf>`__
@@ -537,6 +538,13 @@ Package <https://github.com/gvanas/KeccakCodePackage>`__
 
 Changelog
 ---------
+
+1.2.0 (2018-12-02) 
+~~~~~~~~~~~~~~~~~~
+
+- Add Kravatte-SANE Support [Calvin McCoy]
+- Add Kravatte-SANSE Support [Calvin McCoy]
+- Refactor tests into seperate classes [Calvin McCoy]
 
 1.1.0 (2018-09-08) 
 ~~~~~~~~~~~~~~~~~~
